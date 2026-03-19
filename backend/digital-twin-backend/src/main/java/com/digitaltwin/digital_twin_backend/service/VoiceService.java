@@ -40,7 +40,6 @@ public class VoiceService {
     @Value("${app.assemblyai.api.key}")
     private String assemblyAIApiKey;
 
-    private final Map<String, ByteArrayOutputStream> audioBuffers = new ConcurrentHashMap<>();
     private final Map<String, VoiceInteraction> pendingInteractions = new ConcurrentHashMap<>();
     private final Map<String, CompletableFuture<VoiceResponse>> processingFutures = new ConcurrentHashMap<>();
 
@@ -113,44 +112,29 @@ public class VoiceService {
      * WebSocket thread sirf yeh call karta hai aur turant free ho jata hai
      */
     public void processAudioChunk(String sessionId, String userId, AudioChunk chunk) {
-        // IMMEDIATE RETURN - WebSocket thread free!
-        chunkProcessorExecutor.submit(() -> {
-            try {
-                long startTime = System.currentTimeMillis();
+        // ✅ Lightweight validation only - audio stays in VoiceSession buffer
+        log.debug("Received chunk {} for session {} ({} bytes)",
+                chunk.getSequenceNumber(), sessionId, chunk.getChunkSizeBytes());
 
-                ByteArrayOutputStream buffer = audioBuffers.computeIfAbsent(
-                        sessionId, k -> new ByteArrayOutputStream()
-                );
-
-                byte[] audioData = java.util.Base64.getDecoder().decode(chunk.getData());
-                buffer.write(audioData);
-
-                // Update or create interaction
-                pendingInteractions.computeIfAbsent(sessionId, k -> {
-                    VoiceInteraction interaction = new VoiceInteraction();
-                    interaction.setUserId(userId);
-                    interaction.setStatus(VoiceInteraction.VoiceStatus.RECORDING);
-                    interaction.setCreatedAt(LocalDateTime.now());
-                    return interaction;
-                });
-
-                long processingTime = System.currentTimeMillis() - startTime;
-                log.debug("Processed chunk {} for session {} in {}ms",
-                        chunk.getSequenceNumber(), sessionId, processingTime);
-
-            } catch (Exception e) {
-                log.error("Failed to process audio chunk: {}", e.getMessage());
-            }
-        });
+        // Optional: Add chunk sequencing validation here if needed
+        if (chunk.getSequenceNumber() < 0) {
+            log.warn("Invalid sequence number for chunk: {}", chunk.getSequenceNumber());
+        }
     }
 
     /**
      * Process complete voice - FULLY ASYNC, RETURNS IMMEDIATELY
+     * ✅ Fixed: Now accepts audioData directly instead of looking up from map
      */
     public CompletableFuture<VoiceResponse> processCompleteVoice(
-            String sessionId, String userId, String userType, String mode) {
+            String sessionId,
+            String userId,
+            String userType,
+            String mode,
+            byte[] audioData) { // ✅ 5th parameter added
 
-        log.info("Starting voice processing for session: {}", sessionId);
+        log.info("Starting voice processing for session: {} ({} bytes)",
+                sessionId, audioData != null ? audioData.length : 0);
 
         // Create future that will complete when processing is done
         CompletableFuture<VoiceResponse> future = new CompletableFuture<>();
@@ -159,7 +143,8 @@ public class VoiceService {
         // Submit transcription task to dedicated executor
         transcriptionExecutor.submit(() -> {
             try {
-                VoiceResponse response = processVoiceSync(sessionId, userId, userType, mode);
+                // ✅ Pass audioData to processVoiceSync
+                VoiceResponse response = processVoiceSync(sessionId, userId, userType, mode, audioData);
                 future.complete(response);
             } catch (Exception e) {
                 log.error("Voice processing failed: {}", e.getMessage(), e);
@@ -167,7 +152,7 @@ public class VoiceService {
                         "Processing failed. Kripya phir se koshish karein."));
             } finally {
                 processingFutures.remove(sessionId);
-                audioBuffers.remove(sessionId);
+                // ✅ Removed: audioBuffers.remove(sessionId); — field doesn't exist anymore
                 pendingInteractions.remove(sessionId);
             }
         });
@@ -179,20 +164,22 @@ public class VoiceService {
     /**
      * Synchronous voice processing (runs in background thread)
      */
+    /**
+     * Synchronous voice processing (runs in background thread)
+     * ✅ Fixed: Now accepts audioData directly as parameter
+     */
     private VoiceResponse processVoiceSync(String sessionId, String userId,
-                                           String userType, String mode) {
+            String userType, String mode,
+            byte[] audioData) { // ✅ 5th parameter added
 
-        ByteArrayOutputStream buffer = audioBuffers.get(sessionId);
-        VoiceInteraction interaction = pendingInteractions.get(sessionId);
-
-        if (buffer == null || buffer.size() == 0) {
+        // ✅ Use the passed audioData directly — no lookup from map needed
+        if (audioData == null || audioData.length == 0) {
             log.warn("No audio received for session: {}", sessionId);
             return createErrorResponse(sessionId, "No audio received",
                     "Koi audio nahi mila. Kripya phir se bolein.");
         }
 
         try {
-            byte[] audioData = buffer.toByteArray();
             log.info("Processing {} bytes for session {}", audioData.length, sessionId);
 
             // Step 1: Transcribe (blocks but in background thread)
@@ -228,19 +215,18 @@ public class VoiceService {
      * Generate final response using appropriate executor
      */
     private VoiceResponse generateFinalResponse(String transcription, String context,
-                                                String userType, String mode,
-                                                String userId, String sessionId,
-                                                ConfidenceScore confidence) {
+            String userType, String mode,
+            String userId, String sessionId,
+            ConfidenceScore confidence) {
 
         try {
             if (confidence.isEmergency()) {
                 return handleEmergency(userId, transcription, sessionId);
             } else if (confidence.isHighConfidence()) {
                 // Use responseExecutor for LLM/TTS calls
-                CompletableFuture<VoiceResponse> future = CompletableFuture.supplyAsync(() ->
-                                handleDirectLLM(transcription, context, userType, mode, userId, sessionId),
-                        responseExecutor
-                );
+                CompletableFuture<VoiceResponse> future = CompletableFuture.supplyAsync(
+                        () -> handleDirectLLM(transcription, context, userType, mode, userId, sessionId),
+                        responseExecutor);
                 return future.get(30, TimeUnit.SECONDS);
             } else {
                 String reviewId = hitlQueueService.addToQueue(
@@ -378,8 +364,8 @@ public class VoiceService {
     }
 
     private VoiceResponse handleDirectLLM(String transcription, String context,
-                                          String userType, String mode,
-                                          String userId, String sessionId) {
+            String userType, String mode,
+            String userId, String sessionId) {
         try {
             String prompt = buildPrompt(transcription, context, userType);
             String llmResponse = llmService.callLLM(prompt, mode);
@@ -440,14 +426,15 @@ public class VoiceService {
     }
 
     public void cancelProcessing(String sessionId) {
-        audioBuffers.remove(sessionId);
+        // ✅ REMOVED: audioBuffers.remove(sessionId);
+        
         pendingInteractions.remove(sessionId);
-
+    
         CompletableFuture<VoiceResponse> future = processingFutures.remove(sessionId);
         if (future != null && !future.isDone()) {
             future.complete(createErrorResponse(sessionId, "Cancelled", "Processing cancelled"));
         }
-
+    
         log.info("Cancelled processing for session: {}", sessionId);
     }
 }

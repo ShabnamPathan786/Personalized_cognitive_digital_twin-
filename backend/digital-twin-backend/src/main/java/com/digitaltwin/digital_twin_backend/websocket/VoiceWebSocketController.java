@@ -38,8 +38,8 @@ public class VoiceWebSocketController {
 
     @MessageMapping("/voice.connect")
     public void connect(Principal principal,
-                        @Header("sessionId") String sessionId,
-                        SimpMessageHeaderAccessor headerAccessor) {
+            @Header("sessionId") String sessionId,
+            SimpMessageHeaderAccessor headerAccessor) {
 
         try {
             CustomUserDetails user = (CustomUserDetails) ((Authentication) principal).getPrincipal();
@@ -72,8 +72,7 @@ public class VoiceWebSocketController {
                             .interactionId(sessionId)
                             .textResponse("Connected to voice service")
                             .timestamp(LocalDateTime.now())
-                            .build()
-            );
+                            .build());
 
             log.info("Connection acknowledgment sent to user: {}", user.getUsername());
 
@@ -84,61 +83,47 @@ public class VoiceWebSocketController {
 
     @MessageMapping("/voice.stream")
     public void handleAudioChunk(@Payload AudioChunk chunk,
-                                 Principal principal,
-                                 @Header("sessionId") String sessionId) {
+            Principal principal,
+            @Header("sessionId") String sessionId) {
 
+        log.info("📥 CHUNK RECEIVED - Session: {}, Seq: {}, Size: {} bytes, ActiveSessions: {}",
+                sessionId,
+                chunk.getSequenceNumber(),
+                chunk.getChunkSizeBytes(),
+                activeSessions.size());
         try {
             CustomUserDetails user = (CustomUserDetails) ((Authentication) principal).getPrincipal();
             log.debug("📥 Received chunk {} for session {}", chunk.getSequenceNumber(), sessionId);
 
             VoiceSession session = activeSessions.get(sessionId);
             if (session == null) {
-                session = new VoiceSession();
-                session.setSessionId(sessionId);
-                session.setUserId(user.getId());
-                session.setUserType(user.getUserType().name());
-                session.setUsername(user.getUsername());
-                session.setConnectedAt(LocalDateTime.now());
-                session.setActive(true);
-                activeSessions.put(sessionId, session);
-                log.info("Created new session for user: {}", user.getUsername());
+                log.warn("⚠️ No active session for chunk: {}", sessionId);
+                return;
             }
 
             // Check for out-of-order chunks
             if (chunk.getSequenceNumber() != session.getExpectedSequence()) {
                 log.warn("⚠️ Out of order chunk - Expected: {}, Got: {}",
                         session.getExpectedSequence(), chunk.getSequenceNumber());
-
-                messagingTemplate.convertAndSendToUser(
-                        user.getUsername(),
-                        "/queue/voice.retransmit",
-                        Map.of(
-                                "missingSequence", session.getExpectedSequence(),
-                                "lastReceived", Math.max(0, chunk.getSequenceNumber() - 1),
-                                "timestamp", System.currentTimeMillis()
-                        )
-                );
                 return;
             }
 
-            // Process the chunk
-            voiceService.processAudioChunk(sessionId, user.getId(), chunk);
+            // ✅ Store audio ONLY in VoiceSession buffer (single source of truth)
+            if (chunk.getData() != null) {
+                try {
+                    byte[] audioData = java.util.Base64.getDecoder().decode(chunk.getData());
+                    session.appendAudio(audioData); // ✅ Only place where audio is stored
+                } catch (IllegalArgumentException e) {
+                    log.warn("Failed to decode base64 data for chunk {}", chunk.getSequenceNumber());
+                    return;
+                }
+            }
 
-            // Update session state
+            // Update session metadata
             session.setExpectedSequence(chunk.getSequenceNumber() + 1);
             session.setLastChunkReceived(LocalDateTime.now());
             session.setTotalChunks(session.getTotalChunks() + 1);
             session.setTotalBytes(session.getTotalBytes() + chunk.getChunkSizeBytes());
-
-            // Append audio data to buffer
-            if (chunk.getData() != null) {
-                try {
-                    byte[] audioData = java.util.Base64.getDecoder().decode(chunk.getData());
-                    session.appendAudio(audioData);
-                } catch (IllegalArgumentException e) {
-                    log.warn("Failed to decode base64 data for chunk {}", chunk.getSequenceNumber());
-                }
-            }
 
             // Send acknowledgment
             messagingTemplate.convertAndSendToUser(
@@ -147,33 +132,17 @@ public class VoiceWebSocketController {
                     Map.of(
                             "ack", chunk.getSequenceNumber(),
                             "timestamp", System.currentTimeMillis(),
-                            "sessionId", sessionId
-                    )
-            );
-
-            log.debug("✅ Acknowledged chunk {} for session {}", chunk.getSequenceNumber(), sessionId);
+                            "sessionId", sessionId));
 
         } catch (Exception e) {
             log.error("❌ Error processing audio chunk: {}", e.getMessage(), e);
-
-            if (principal != null) {
-                messagingTemplate.convertAndSendToUser(
-                        principal.getName(),
-                        "/queue/voice.error",
-                        Map.of(
-                                "error", "Failed to process audio",
-                                "message", e.getMessage(),
-                                "timestamp", System.currentTimeMillis()
-                        )
-                );
-            }
         }
     }
 
     @MessageMapping("/voice.stop")
     public void stopStreaming(Principal principal,
-                              @Header("sessionId") String sessionId,
-                              @Payload(required = false) Map<String, Object> payload) {
+            @Header("sessionId") String sessionId,
+            @Payload(required = false) Map<String, Object> payload) {
 
         try {
             CustomUserDetails user = (CustomUserDetails) ((Authentication) principal).getPrincipal();
@@ -192,19 +161,26 @@ public class VoiceWebSocketController {
                     ? payload.get("mode").toString()
                     : (user.getUserType() == User.UserType.DEMENTIA_PATIENT ? "dementia" : "standard");
 
-            // Process complete voice
+            // ✅ Get audio data from session and immediately clear buffer
+            byte[] audioData = session.getAudioData();
+            session.resetBuffer(); // Free memory immediately to prevent overflow
+
+            log.info("📦 Processing {} bytes of audio for session {}",
+                    audioData != null ? audioData.length : 0, sessionId);
+
+            // ✅ Pass audio data directly to service
             voiceService.processCompleteVoice(
                     sessionId,
                     user.getId(),
                     user.getUserType().name(),
-                    mode
+                    mode,
+                    audioData // Pass the actual bytes
             ).thenAccept(response -> {
                 try {
                     messagingTemplate.convertAndSendToUser(
                             user.getUsername(),
                             "/queue/voice.response",
-                            response
-                    );
+                            response);
                     log.info("✅ Voice response sent to user: {}", user.getUsername());
                 } catch (Exception e) {
                     log.error("Failed to send response: {}", e.getMessage());
@@ -218,9 +194,7 @@ public class VoiceWebSocketController {
                             Map.of(
                                     "error", "Processing failed",
                                     "message", throwable.getMessage(),
-                                    "timestamp", System.currentTimeMillis()
-                            )
-                    );
+                                    "timestamp", System.currentTimeMillis()));
                 } catch (Exception e) {
                     log.error("Failed to send error: {}", e.getMessage());
                 }
@@ -234,7 +208,7 @@ public class VoiceWebSocketController {
 
     @MessageMapping("/voice.ping")
     public void handlePing(Principal principal,
-                           @Header("sessionId") String sessionId) {
+            @Header("sessionId") String sessionId) {
         log.debug("🏓 Ping received from session: {}", sessionId);
 
         if (principal != null) {
@@ -245,18 +219,17 @@ public class VoiceWebSocketController {
                         Map.of(
                                 "pong", true,
                                 "sessionId", sessionId,
-                                "timestamp", System.currentTimeMillis()
-                        )
-                );
+                                "timestamp", System.currentTimeMillis()));
+                log.debug("🏓 Pong sent to: {}", principal.getName());
             } catch (Exception e) {
-                log.debug("Failed to send pong: {}", e.getMessage());
+                log.error("Failed to send pong: {}", e.getMessage());
             }
         }
     }
 
     @MessageMapping("/voice.cancel")
     public void cancelProcessing(Principal principal,
-                                 @Header("sessionId") String sessionId) {
+            @Header("sessionId") String sessionId) {
 
         try {
             CustomUserDetails user = (CustomUserDetails) ((Authentication) principal).getPrincipal();
@@ -275,9 +248,7 @@ public class VoiceWebSocketController {
                     Map.of(
                             "message", "Processing cancelled",
                             "sessionId", sessionId,
-                            "timestamp", System.currentTimeMillis()
-                    )
-            );
+                            "timestamp", System.currentTimeMillis()));
 
         } catch (Exception e) {
             log.error("❌ Error in cancel handler: {}", e.getMessage(), e);
@@ -286,7 +257,7 @@ public class VoiceWebSocketController {
 
     @MessageMapping("/voice.disconnect")
     public void disconnect(Principal principal,
-                           @Header("sessionId") String sessionId) {
+            @Header("sessionId") String sessionId) {
 
         try {
             String username = "unknown";
@@ -351,8 +322,7 @@ public class VoiceWebSocketController {
 
     public static class VoiceSession {
 
-        private static final org.slf4j.Logger log =
-                org.slf4j.LoggerFactory.getLogger(VoiceSession.class);
+        private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(VoiceSession.class);
 
         private String sessionId;
         private String userId;
@@ -370,49 +340,121 @@ public class VoiceWebSocketController {
         private boolean processing = false;
         private java.io.ByteArrayOutputStream audioBuffer = new java.io.ByteArrayOutputStream();
 
-        public String getSessionId() { return sessionId; }
-        public void setSessionId(String sessionId) { this.sessionId = sessionId; }
+        public String getSessionId() {
+            return sessionId;
+        }
 
-        public String getUserId() { return userId; }
-        public void setUserId(String userId) { this.userId = userId; }
+        public void setSessionId(String sessionId) {
+            this.sessionId = sessionId;
+        }
 
-        public String getUserType() { return userType; }
-        public void setUserType(String userType) { this.userType = userType; }
+        public String getUserId() {
+            return userId;
+        }
 
-        public String getUsername() { return username; }
-        public void setUsername(String username) { this.username = username; }
+        public void setUserId(String userId) {
+            this.userId = userId;
+        }
 
-        public boolean isActive() { return active; }
-        public void setActive(boolean active) { this.active = active; }
+        public String getUserType() {
+            return userType;
+        }
 
-        public int getExpectedSequence() { return expectedSequence; }
-        public void setExpectedSequence(int expectedSequence) { this.expectedSequence = expectedSequence; }
+        public void setUserType(String userType) {
+            this.userType = userType;
+        }
 
-        public int getTotalChunks() { return totalChunks; }
-        public void setTotalChunks(int totalChunks) { this.totalChunks = totalChunks; }
+        public String getUsername() {
+            return username;
+        }
 
-        public long getTotalBytes() { return totalBytes; }
-        public void setTotalBytes(long totalBytes) { this.totalBytes = totalBytes; }
+        public void setUsername(String username) {
+            this.username = username;
+        }
 
-        public LocalDateTime getConnectedAt() { return connectedAt; }
-        public void setConnectedAt(LocalDateTime connectedAt) { this.connectedAt = connectedAt; }
+        public boolean isActive() {
+            return active;
+        }
 
-        public LocalDateTime getLastChunkReceived() { return lastChunkReceived; }
-        public void setLastChunkReceived(LocalDateTime lastChunkReceived) { this.lastChunkReceived = lastChunkReceived; }
+        public void setActive(boolean active) {
+            this.active = active;
+        }
 
-        public LocalDateTime getCompletedAt() { return completedAt; }
-        public void setCompletedAt(LocalDateTime completedAt) { this.completedAt = completedAt; }
+        public int getExpectedSequence() {
+            return expectedSequence;
+        }
 
-        public LocalDateTime getDisconnectedAt() { return disconnectedAt; }
-        public void setDisconnectedAt(LocalDateTime disconnectedAt) { this.disconnectedAt = disconnectedAt; }
+        public void setExpectedSequence(int expectedSequence) {
+            this.expectedSequence = expectedSequence;
+        }
 
-        public String getInteractionId() { return interactionId; }
-        public void setInteractionId(String interactionId) { this.interactionId = interactionId; }
+        public int getTotalChunks() {
+            return totalChunks;
+        }
 
-        public boolean isProcessing() { return processing; }
-        public void setProcessing(boolean processing) { this.processing = processing; }
+        public void setTotalChunks(int totalChunks) {
+            this.totalChunks = totalChunks;
+        }
 
-        public java.io.ByteArrayOutputStream getAudioBuffer() { return audioBuffer; }
+        public long getTotalBytes() {
+            return totalBytes;
+        }
+
+        public void setTotalBytes(long totalBytes) {
+            this.totalBytes = totalBytes;
+        }
+
+        public LocalDateTime getConnectedAt() {
+            return connectedAt;
+        }
+
+        public void setConnectedAt(LocalDateTime connectedAt) {
+            this.connectedAt = connectedAt;
+        }
+
+        public LocalDateTime getLastChunkReceived() {
+            return lastChunkReceived;
+        }
+
+        public void setLastChunkReceived(LocalDateTime lastChunkReceived) {
+            this.lastChunkReceived = lastChunkReceived;
+        }
+
+        public LocalDateTime getCompletedAt() {
+            return completedAt;
+        }
+
+        public void setCompletedAt(LocalDateTime completedAt) {
+            this.completedAt = completedAt;
+        }
+
+        public LocalDateTime getDisconnectedAt() {
+            return disconnectedAt;
+        }
+
+        public void setDisconnectedAt(LocalDateTime disconnectedAt) {
+            this.disconnectedAt = disconnectedAt;
+        }
+
+        public String getInteractionId() {
+            return interactionId;
+        }
+
+        public void setInteractionId(String interactionId) {
+            this.interactionId = interactionId;
+        }
+
+        public boolean isProcessing() {
+            return processing;
+        }
+
+        public void setProcessing(boolean processing) {
+            this.processing = processing;
+        }
+
+        public java.io.ByteArrayOutputStream getAudioBuffer() {
+            return audioBuffer;
+        }
 
         public void appendAudio(byte[] data) {
             try {
@@ -424,7 +466,12 @@ public class VoiceWebSocketController {
             }
         }
 
-        public byte[] getAudioData() { return audioBuffer.toByteArray(); }
-        public void resetBuffer() { audioBuffer.reset(); }
+        public byte[] getAudioData() {
+            return audioBuffer.toByteArray();
+        }
+
+        public void resetBuffer() {
+            audioBuffer.reset();
+        }
     }
 }
