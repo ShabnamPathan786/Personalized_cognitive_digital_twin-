@@ -1,7 +1,5 @@
 package com.digitaltwin.digital_twin_backend.controller;
 
-
-
 import com.digitaltwin.digital_twin_backend.dto.ApiResponse;
 import com.digitaltwin.digital_twin_backend.model.Medication;
 import com.digitaltwin.digital_twin_backend.security.CustomUserDetails;
@@ -157,8 +155,7 @@ public class MedicationController {
                     id,
                     request.getScheduledTime(),
                     request.getActualTime() != null ? request.getActualTime() : LocalDateTime.now(),
-                    request.getNotes()
-            );
+                    request.getNotes());
 
             return ResponseEntity.ok(ApiResponse.success("Medication logged as taken", updated));
         } catch (RuntimeException e) {
@@ -188,8 +185,7 @@ public class MedicationController {
             Medication updated = medicationService.logMedicationMissed(
                     id,
                     request.getScheduledTime(),
-                    request.getNotes()
-            );
+                    request.getNotes());
 
             return ResponseEntity.ok(ApiResponse.success("Medication logged as missed", updated));
         } catch (RuntimeException e) {
@@ -253,5 +249,47 @@ public class MedicationController {
         private LocalDateTime scheduledTime;
         private LocalDateTime actualTime;
         private String notes;
+    }
+
+    /**
+     * Get upcoming medications for today
+     * GET /api/medications/upcoming
+     */
+    @GetMapping("/upcoming")
+    public ResponseEntity<ApiResponse<List<Medication>>> getUpcomingMedications(
+            Authentication authentication) {
+        try {
+            CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
+            List<Medication> medications = medicationService.getUpcomingMedications(userDetails.getId());
+            return ResponseEntity.ok(ApiResponse.success("Upcoming medications retrieved", medications));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Failed to retrieve upcoming medications: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Get medication logs
+     * GET /api/medications/{id}/logs
+     */
+    @GetMapping("/{id}/logs")
+    public ResponseEntity<ApiResponse<List<Medication.MedicationLog>>> getMedicationLogs(
+            @PathVariable String id,
+            Authentication authentication) {
+        try {
+            Medication medication = medicationService.getMedicationById(id);
+            CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
+
+            if (!medication.getUserId().equals(userDetails.getId())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(ApiResponse.error("Access denied"));
+            }
+
+            List<Medication.MedicationLog> logs = medicationService.getMedicationLogs(id);
+            return ResponseEntity.ok(ApiResponse.success("Logs retrieved", logs));
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.error(e.getMessage()));
+        }
     }
 }
