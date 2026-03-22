@@ -18,6 +18,7 @@ import VoiceHelper from './components/VoiceHelper';
 import HITLReviewDashboard from './components/HITLReviewDashboard';
 
 import './index.css';
+import LandingPage from './pages/LandingPage';
 
 /* ==================== LOADING SPINNER ==================== */
 const LoadingSpinner = () => (
@@ -85,7 +86,9 @@ const HITLReviewerRoute = ({ children }) => {
 function AppRoutes() {
   return (
     <Routes>
+
       {/* -------- PUBLIC -------- */}
+      <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
       <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
 
