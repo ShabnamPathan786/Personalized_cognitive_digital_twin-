@@ -35,7 +35,9 @@ public class MedicationScheduler {
      * 1. Remind patient if medication is due in next 15 minutes
      * 2. Alert caregivers if medication was missed 30 minutes ago
      */
+
     @Scheduled(fixedRate = 60000)
+
     public void checkMedications() {
         logger.debug("⏰ Scheduler tick — checking medications");
 
