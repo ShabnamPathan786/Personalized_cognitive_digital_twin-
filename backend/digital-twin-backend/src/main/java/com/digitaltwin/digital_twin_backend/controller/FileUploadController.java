@@ -2,28 +2,23 @@ package com.digitaltwin.digital_twin_backend.controller;
 
 import com.digitaltwin.digital_twin_backend.model.FileUpload;
 import com.digitaltwin.digital_twin_backend.model.Note;
-import com.digitaltwin.digital_twin_backend.model.User;
 import com.digitaltwin.digital_twin_backend.security.CustomUserDetails;
 import com.digitaltwin.digital_twin_backend.service.FileUploadService;
 import com.digitaltwin.digital_twin_backend.service.SummarizationService;
 import com.digitaltwin.digital_twin_backend.service.NoteService;
 import com.mongodb.client.gridfs.model.GridFSFile;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.gridfs.GridFsTemplate;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
+
 import java.io.InputStream;
-import java.time.LocalDateTime;
 import java.util.*;
 
 @RestController

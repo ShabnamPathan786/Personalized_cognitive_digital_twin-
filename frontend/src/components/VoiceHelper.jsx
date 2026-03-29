@@ -7,6 +7,7 @@ const VoiceHelper = () => {
     const {
         connected,
         transcription,
+        ready,
         response,
         waitingForReview,
         reviewId,
@@ -39,6 +40,13 @@ const VoiceHelper = () => {
         }
     }, [waitingForReview]);
 
+    useEffect(() => {
+        console.log('MediaRecorder supported:', !!window.MediaRecorder);
+        console.log('webm opus:', MediaRecorder.isTypeSupported?.('audio/webm;codecs=opus'));
+        console.log('webm:', MediaRecorder.isTypeSupported?.('audio/webm'));
+        console.log('mp4:', MediaRecorder.isTypeSupported?.('audio/mp4'));
+    }, []);
+
     const formatWaitTime = (seconds) => {
         const mins = Math.floor(seconds / 60);
         const secs = seconds % 60;
@@ -58,8 +66,8 @@ const VoiceHelper = () => {
                     </h2>
                     <div className="flex items-center gap-3">
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${connected
-                                ? 'bg-green-500 text-white'
-                                : 'bg-red-500 text-white'
+                            ? 'bg-green-500 text-white'
+                            : 'bg-red-500 text-white'
                             }`}>
                             {connected ? '● Connected' : '○ Disconnected'}
                         </span>
@@ -80,8 +88,8 @@ const VoiceHelper = () => {
                         <button
                             onClick={() => setLocalMode('standard')}
                             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition ${mode === 'standard'
-                                    ? 'bg-blue-600 text-white'
-                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                                 }`}
                         >
                             Standard
@@ -89,8 +97,8 @@ const VoiceHelper = () => {
                         <button
                             onClick={() => setLocalMode('dementia')}
                             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition ${mode === 'dementia'
-                                    ? 'bg-purple-600 text-white'
-                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                ? 'bg-purple-600 text-white'
+                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                                 }`}
                         >
                             Simple (Dementia)
@@ -119,8 +127,8 @@ const VoiceHelper = () => {
                 <div className="text-center mb-6">
                     <button
                         onClick={isRecording ? stopRecording : startRecording}
-                        disabled={!connected}
-                        className={`relative w-32 h-32 rounded-full transition-all duration-300 transform hover:scale-105 focus:outline-none focus:ring-4 ${!connected
+                        disabled={!ready} // ✅ Use ready, not connected
+                        className={`relative w-32 h-32 rounded-full transition-all duration-300 transform hover:scale-105 focus:outline-none focus:ring-4 ${!ready
                                 ? 'bg-gray-400 cursor-not-allowed'
                                 : isRecording
                                     ? 'bg-red-600 animate-pulse shadow-lg shadow-red-300'
@@ -128,24 +136,16 @@ const VoiceHelper = () => {
                             }`}
                     >
                         <span className="text-5xl text-white">
-                            {isRecording ? '⏹️' : '🎤'}
+                            {!ready ? '⏳' : isRecording ? '⏹️' : '🎤'}
                         </span>
                     </button>
                     <p className="mt-3 text-sm text-gray-600">
-                        {!connected
-                            ? 'Connecting...'
+                        {!ready
+                            ? 'Initializing...'
                             : isRecording
                                 ? 'Recording... Click to stop'
                                 : 'Click to start speaking'}
                     </p>
-                    {isRecording && (
-                        <button
-                            onClick={cancelRecording}
-                            className="mt-2 text-xs text-red-600 hover:text-red-800"
-                        >
-                            Cancel Recording
-                        </button>
-                    )}
                 </div>
 
                 {/* Waiting for Review */}
