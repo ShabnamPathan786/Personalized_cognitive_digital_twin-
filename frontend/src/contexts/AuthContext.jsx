@@ -1,7 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { authApi } from '../api/authApi';
-import { profileApi } from '../api/profileApi'; // ✅ Import profileApi
-import axios from '../api/axios';
+import { profileApi } from '../api/profileApi';
 
 const AuthContext = createContext(null);
 
@@ -18,38 +17,42 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  // Check if user is logged in on mount
+  // Check localStorage on mount (no API call)
   useEffect(() => {
-    checkAuth();
-  }, []);
-
-  const checkAuth = async () => {
-    try {
-      const response = await authApi.getCurrentUser();
-      if (response.success) {
-        setUser(response.data);
+    const storedUser = localStorage.getItem('user');
+    const sessionId = localStorage.getItem('sessionId');
+    
+    if (storedUser && storedUser !== 'undefined' && sessionId) {
+      try {
+        setUser(JSON.parse(storedUser));
         setIsAuthenticated(true);
+      } catch (error) {
+        console.error('Error parsing stored user:', error);
+        localStorage.removeItem('user');
+        localStorage.removeItem('sessionId');
       }
-    } catch (error) {
-      console.error('Auth check failed:', error);
-      setUser(null);
-      setIsAuthenticated(false);
-    } finally {
-      setLoading(false);
     }
-  };
+    setLoading(false);
+  }, []);
 
   const login = async (credentials) => {
     try {
       const response = await authApi.login(credentials);
       if (response.success) {
-        setUser(response.data.user);
+        const userData = response.data.user;
+        const sessionId = response.data.sessionId;
+        
+        // Store in localStorage
+        localStorage.setItem('user', JSON.stringify(userData));
+        localStorage.setItem('sessionId', sessionId);
+        
+        setUser(userData);
         setIsAuthenticated(true);
         return { success: true, data: response.data };
       }
       return { success: false, message: response.message };
     } catch (error) {
-      console.error('Login failed:', error);
+      console.error('Login failed:', error.message);
       return {
         success: false,
         message: error.response?.data?.message || 'Login failed',
@@ -79,45 +82,42 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
+      localStorage.removeItem('user');
+      localStorage.removeItem('sessionId');
       setUser(null);
       setIsAuthenticated(false);
     }
   };
 
-  // ✅ FIXED: Use profileApi instead of direct axios call
-  // ✅ Now matches the structure from profileApi.js
   const updateProfile = async (profileData) => {
     try {
-      // Use profileApi which already has consistent response wrapping
       const response = await profileApi.completeProfile(profileData);
-
       if (response.success) {
-        // Update user state with the returned data
-        setUser(prevUser => ({
-          ...prevUser,
-          ...response.data,
-          profileCompleted: true
-        }));
-
-        // Also update isAuthenticated if needed
-        setIsAuthenticated(true);
-
-        return {
-          success: true,
-          data: response.data
-        };
+        const updatedUser = { ...user, ...response.data, profileCompleted: true };
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        setUser(updatedUser);
+        return { success: true, data: response.data };
       }
-
-      return {
-        success: false,
-        message: response.message || 'Failed to update profile'
-      };
+      return { success: false, message: response.message || 'Failed to update profile' };
     } catch (error) {
       console.error('Profile update failed:', error);
       return {
         success: false,
         message: error.response?.data?.message || 'Failed to update profile',
       };
+    }
+  };
+
+  // Refresh user data from server (optional - call when needed)
+  const refreshUser = async () => {
+    try {
+      const response = await authApi.getCurrentUser();
+      if (response.success) {
+        localStorage.setItem('user', JSON.stringify(response.data));
+        setUser(response.data);
+      }
+    } catch (error) {
+      console.error('Refresh user failed:', error);
     }
   };
 
@@ -128,8 +128,8 @@ export const AuthProvider = ({ children }) => {
     login,
     register,
     logout,
-    checkAuth,
     updateProfile,
+    refreshUser,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

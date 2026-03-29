@@ -55,7 +55,8 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-                .cors(Customizer.withDefaults())
+                // ✅ FIXED: Use your custom CORS configuration explicitly
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
                 .authenticationProvider(authenticationProvider())
 
@@ -63,36 +64,25 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/api/auth/**", "/actuator/health", "/api/public/**").permitAll()
-
-                        // ✅ FIX 1: Permit WebSocket handshake and SockJS endpoints.
-                        // These URLs are hit BEFORE the STOMP CONNECT frame is sent,
-                        // so Spring Security sees no authentication yet and rejects them
-                        // as anonymous — causing the 1-second connect→disconnect loop.
-                        // Authentication is enforced at the STOMP message level by
-                        // WebSocketSecurityConfig.messageAuthorizationManager() instead.
                         .requestMatchers("/ws-voice/**").permitAll()
                         .requestMatchers("/ws-voice-direct/**").permitAll()
-
                         .requestMatchers("/api/dementia/**").hasRole("DEMENTIA_PATIENT")
                         .requestMatchers("/api/caregiver/**").hasRole("CAREGIVER")
                         .requestMatchers("/api/emergency-alerts/**").hasAnyRole("DEMENTIA_PATIENT", "CAREGIVER")
                         .requestMatchers("/api/profile/**").hasAnyRole("DEMENTIA_PATIENT", "CAREGIVER")
-                        .anyRequest().authenticated()
-                )
+                        .anyRequest().authenticated())
 
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
                         .maximumSessions(3)
-                        .maxSessionsPreventsLogin(false)
-                )
+                        .maxSessionsPreventsLogin(false))
 
                 .logout(logout -> logout
                         .logoutUrl("/api/auth/logout")
                         .logoutSuccessHandler(logoutSuccessHandler())
                         .invalidateHttpSession(true)
                         .deleteCookies("JSESSIONID")
-                        .permitAll()
-                )
+                        .permitAll())
 
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint((request, response, authException) -> {
@@ -105,8 +95,7 @@ public class SecurityConfig {
                             response.setStatus(403);
                             response.setContentType("application/json");
                             response.getWriter().write("{\"error\": \"Forbidden\", \"message\": \"Access denied\"}");
-                        })
-                );
+                        }));
 
         return http.build();
     }
@@ -115,42 +104,34 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
 
-        // ✅ FIX 2: Use setAllowedOriginPatterns() instead of setAllowedOrigins().
-        // setAllowedOrigins() rejects requests with a null Origin header, which
-        // SockJS sends during its WebSocket upgrade handshake — causing CORS failure
-        // before the request even reaches Spring Security.
-        // setAllowedOriginPatterns() handles null-origin SockJS requests correctly
-        // while still allowing credentials (setAllowCredentials(true)).
-        configuration.setAllowedOriginPatterns(List.of(
+        // Use allowedOriginPatterns instead of allowedOrigins for more flexibility with
+        // credentials
+        configuration.setAllowedOriginPatterns(Arrays.asList(
                 "http://localhost:3000",
                 "http://localhost:5173",
-                "http://127.0.0.1:*"   // covers any local dev port variations
-        ));
+                "http://127.0.0.1:5173",
+                "http://127.0.0.1:3000"));
 
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
 
-        // ✅ FIX 3: Add missing headers that SockJS and STOMP need
+        // Explicitly list headers instead of wildcard "*"
         configuration.setAllowedHeaders(Arrays.asList(
                 "Authorization",
                 "Content-Type",
-                "X-Requested-With",
                 "Accept",
                 "Origin",
+                "X-Requested-With",
                 "Access-Control-Request-Method",
-                "Access-Control-Request-Headers",
-                // SockJS/STOMP specific
-                "heart-beat",
-                "destination",
-                "content-length"
-        ));
+                "Access-Control-Request-Headers"));
 
         configuration.setAllowCredentials(true);
+        configuration.setMaxAge(3600L);
 
-        // ✅ FIX 4: Expose headers the frontend needs to read
+        // Expose headers that frontend needs to read
         configuration.setExposedHeaders(Arrays.asList(
                 "Access-Control-Allow-Origin",
-                "Access-Control-Allow-Credentials"
-        ));
+                "Access-Control-Allow-Credentials",
+                "Set-Cookie"));
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
