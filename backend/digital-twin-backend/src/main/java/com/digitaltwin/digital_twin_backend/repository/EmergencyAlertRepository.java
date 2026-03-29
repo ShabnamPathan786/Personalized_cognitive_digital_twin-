@@ -4,6 +4,7 @@ import com.digitaltwin.digital_twin_backend.model.EmergencyAlert;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Repository
@@ -13,4 +14,10 @@ public interface EmergencyAlertRepository extends MongoRepository<EmergencyAlert
     List<EmergencyAlert> findByNotifiedCaregiverIdsContaining(String caregiverId);
     List<EmergencyAlert> findByStatus(EmergencyAlert.AlertStatus status);
     List<EmergencyAlert> findBySeverity(EmergencyAlert.AlertSeverity severity);
+    List<EmergencyAlert> findByPatientIdAndAlertTypeAndCreatedAtBetween(
+    String patientId,
+    EmergencyAlert.AlertType alertType,
+    LocalDateTime start,
+    LocalDateTime end
+);
 }

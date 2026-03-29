@@ -79,10 +79,10 @@ export default function Navbar() {
             <>
               <button
                 className="btn-ghost"
-                onClick={() => navigate('/dashboard')}
+                onClick={() => navigate('/home')}
                 style={{ fontSize: 'var(--text-sm)' }}
               >
-                Dashboard
+                Home
               </button>
               <button
                 className="btn-primary"

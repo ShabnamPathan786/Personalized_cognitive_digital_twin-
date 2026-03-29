@@ -1,12 +1,13 @@
 package com.digitaltwin.digital_twin_backend.service;
 
-
 import com.digitaltwin.digital_twin_backend.model.Medication;
 import com.digitaltwin.digital_twin_backend.repository.MedicationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -72,13 +73,13 @@ public class MedicationService {
 
         return medicationRepository.save(medication);
     }
-// ... rest of file
+    // ... rest of file
 
     /**
      * Log medication taken
      */
     public Medication logMedicationTaken(String id, LocalDateTime scheduledTime,
-                                         LocalDateTime actualTime, String notes) {
+            LocalDateTime actualTime, String notes) {
         Medication medication = getMedicationById(id);
 
         Medication.MedicationLog log = new Medication.MedicationLog();
@@ -125,5 +126,21 @@ public class MedicationService {
      */
     public void deleteMedication(String id) {
         medicationRepository.deleteById(id);
+    }
+
+    public List<Medication> getUpcomingMedications(String userId) {
+        List<Medication> active = medicationRepository.findByUserIdAndActiveTrue(userId);
+        LocalTime now = LocalTime.now();
+
+        // Filter only medications that have a scheduled time coming up today
+        return active.stream()
+                .filter(med -> med.getScheduledTimes() != null &&
+                        med.getScheduledTimes().stream().anyMatch(t -> t.isAfter(now)))
+                .collect(java.util.stream.Collectors.toList());
+    }
+
+    public List<Medication.MedicationLog> getMedicationLogs(String id) {
+        Medication medication = getMedicationById(id);
+        return medication.getLogs() != null ? medication.getLogs() : new ArrayList<>();
     }
 }

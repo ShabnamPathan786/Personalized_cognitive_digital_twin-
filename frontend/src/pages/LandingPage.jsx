@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import Navbar from './Navbar';
+import { useAuth } from '../contexts/AuthContext';
 
 /* ── Scroll-triggered fade-in ── */
 const useIntersection = (threshold = 0.15) => {
@@ -131,7 +132,15 @@ const TestimonialCard = ({ quote, name, role, delay }) => (
 
 export default function LandingPage() {
   const navigate = useNavigate();
-
+  const {user} = useAuth()
+  const handleNavigate = () => {
+    if (!user) {
+      navigate('/register', { replace: true });
+    } else {
+      navigate('/home', { replace: true });
+    }
+  };
+  
   const features = [
     { icon: '💊', title: 'Medication Reminders', desc: "Automated alerts remind patients when it's time to take their medicine. Caregivers are notified immediately if a dose is missed.", accentColor: '#EA2E00', delay: 0 },
     { icon: '🚨', title: 'Emergency SOS', desc: "One tap sends an emergency alert to all linked caregivers with the patient's real-time location.", accentColor: '#C22500', delay: 0.1 },
@@ -234,7 +243,7 @@ export default function LandingPage() {
           </p>
 
           <div style={{ display: 'flex', gap: 'var(--space-4)', justifyContent: 'center', flexWrap: 'wrap', marginBottom: 'var(--space-16)' }}>
-            <button className="btn-primary" onClick={() => navigate('/register')}>Start for free</button>
+            <button className="btn-primary" onClick={handleNavigate}>Start for free</button>
             <button className="btn-secondary" onClick={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}>See how it works</button>
           </div>
 
