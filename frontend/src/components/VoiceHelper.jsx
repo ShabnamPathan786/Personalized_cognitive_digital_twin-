@@ -517,7 +517,7 @@ const VoiceHelper = () => {
         connected, transcription, ready, response, latestResponse,
         waitingForReview, reviewId, error, isRecording, isProcessing,
         sessionId, startRecording, stopRecording, manualReconnect,
-        clearError, restartConversation, setMode
+        clearError, restartConversation, setMode, clearConversationState
     } = useVoiceWebSocket();
 
     const [mode, setLocalMode] = useState(
@@ -530,6 +530,13 @@ const VoiceHelper = () => {
     const prevResponse                        = useRef('');
 
     useEffect(() => { setMode(mode); }, [mode, setMode]);
+
+    useEffect(() => {
+        clearConversationState();
+        setMessages([]);
+        prevTranscription.current = '';
+        prevResponse.current = '';
+    }, [clearConversationState]);
 
     /* countdown timer for review wait */
     useEffect(() => {

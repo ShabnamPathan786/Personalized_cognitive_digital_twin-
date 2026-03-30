@@ -15,14 +15,7 @@ export const useVoiceWebSocket = () => {
     const [connected, setConnected] = useState(false);
     const [transcription, setTranscription] = useState("");
     const [response, setResponse] = useState(null);
-    const [latestResponse, setLatestResponse] = useState(() => {
-        try {
-            const saved = sessionStorage.getItem("voiceHelper.latestResponse");
-            return saved ? JSON.parse(saved) : null;
-        } catch {
-            return null;
-        }
-    });
+    const [latestResponse, setLatestResponse] = useState(null);
     const [waitingForReview, setWaitingForReview] = useState(false);
     const [reviewId, setReviewId] = useState(null);
     const [error, setError] = useState(null);
@@ -94,22 +87,6 @@ export const useVoiceWebSocket = () => {
         subscriptionsRef.current = [];
     };
 
-    const clearStoredResponse = () => {
-        try {
-            sessionStorage.removeItem("voiceHelper.latestResponse");
-        } catch (error) {
-            console.warn("Unable to clear stored voice response:", error);
-        }
-    };
-
-    const persistLatestResponse = (data) => {
-        try {
-            sessionStorage.setItem("voiceHelper.latestResponse", JSON.stringify(data));
-        } catch (error) {
-            console.warn("Unable to persist latest voice response:", error);
-        }
-    };
-
     const safeSetError = (message) => {
         if (!isUnmountedRef.current) {
             setError(message);
@@ -140,7 +117,6 @@ export const useVoiceWebSocket = () => {
         setError(null);
         setIsProcessing(false);
         lastHandledMessageRef.current = null;
-        clearStoredResponse();
     };
 
     const clearSubscriptions = () => {
@@ -163,7 +139,6 @@ export const useVoiceWebSocket = () => {
     const rememberLatestResponse = (data) => {
         setResponse(data);
         setLatestResponse(data);
-        persistLatestResponse(data);
     };
 
     const buildMessageKey = (data) => {
@@ -402,11 +377,10 @@ export const useVoiceWebSocket = () => {
             setWaitingForReview(false);
             setReviewId(null);
             setResponse(normalizedData.textResponse ? normalizedData : null);
-            if (normalizedData.textResponse) {
-                setLatestResponse(normalizedData);
-                persistLatestResponse(normalizedData);
-            }
-            safeSetError(normalizedData.textResponse || "The voice request failed.");
+                if (normalizedData.textResponse) {
+                    setLatestResponse(normalizedData);
+                }
+                safeSetError(normalizedData.textResponse || "The voice request failed.");
         } else {
             safeSetError(`Unsupported voice response status: ${normalizedData.status}`);
         }
@@ -525,7 +499,6 @@ export const useVoiceWebSocket = () => {
             setReviewId(null);
             setIsProcessing(false);
             lastHandledMessageRef.current = null;
-            clearStoredResponse();
 
             const stream = await navigator.mediaDevices.getUserMedia({
                 audio: {
@@ -759,6 +732,10 @@ export const useVoiceWebSocket = () => {
         setError(null);
     }, []);
 
+    const clearConversationState = useCallback(() => {
+        resetConversationState();
+    }, []);
+
     return {
         ready,
         connected,
@@ -780,5 +757,6 @@ export const useVoiceWebSocket = () => {
         manualReconnect,
         clearError,
         restartConversation,
+        clearConversationState,
     };
 };
