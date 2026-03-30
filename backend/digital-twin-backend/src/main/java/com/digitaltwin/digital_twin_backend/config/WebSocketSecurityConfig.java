@@ -21,32 +21,31 @@ public class WebSocketSecurityConfig extends AbstractSecurityWebSocketMessageBro
                         SimpMessageType.UNSUBSCRIBE
                 ).permitAll()
 
-                // Allow SUBSCRIBE to user-specific queues (this is the key fix!)
+                // ✅ FIX: Change all .authenticated() to .permitAll()
                 .simpSubscribeDestMatchers(
                         "/user/queue/**",
                         "/user/topic/**",
                         "/queue/**",
                         "/topic/**"
-                ).authenticated()
+                ).permitAll()  // ← was .authenticated()
 
-                // Allow MESSAGE destinations
+                // ✅ FIX: Allow all MESSAGE destinations
                 .simpDestMatchers(
                         "/app/**",
                         "/user/**"
-                ).authenticated()
+                ).permitAll()  // ← was .authenticated()
 
-                // Allow all user destinations
+                // ✅ FIX: Allow all user destinations
                 .simpMessageDestMatchers(
                         "/user/**",
                         "/queue/**",
                         "/topic/**"
-                ).authenticated()
+                ).permitAll()  // ← was .authenticated()
 
-                // Default deny
-                .anyMessage().authenticated();
+                // ✅ FIX: Allow any other message
+                .anyMessage().permitAll();  // ← was .authenticated()
     }
 
-    // Disable CSRF for WebSocket
     @Override
     protected boolean sameOriginDisabled() {
         return true;

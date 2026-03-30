@@ -50,53 +50,57 @@ public class TTSService {
     /**
      * Convert text to speech and return audio URL
      */
+    // public String textToSpeech(String text, String userId) throws IOException {
+    //     log.info("Generating TTS for user: {}, text length: {}", userId, text.length());
+
+    //     // Truncate long text
+    //     if (text.length() > 500) {
+    //         text = text.substring(0, 500) + "...";
+    //     }
+
+    //     byte[] audioData;
+
+    //     if ("google".equalsIgnoreCase(ttsService)) {
+    //         audioData = googleTTS(text);
+    //     } else {
+    //         audioData = elevenLabsTTS(text);
+    //     }
+
+    //     if (audioData == null || audioData.length == 0) {
+    //         throw new IOException("TTS failed - no audio generated");
+    //     }
+
+    //     // Save to GridFS
+    //     String filename = "tts_" + userId + "_" + System.currentTimeMillis() + ".mp3";
+    //     ObjectId fileId = gridFsTemplate.store(
+    //             new ByteArrayInputStream(audioData),
+    //             filename,
+    //             "audio/mpeg"
+    //     );
+
+    //     // Create file record
+    //     FileUpload fileUpload = new FileUpload();
+    //     fileUpload.setUserId(userId);
+    //     fileUpload.setFileName(filename);
+    //     fileUpload.setOriginalFileName(filename);
+    //     fileUpload.setFileType("audio/mpeg");
+    //     fileUpload.setFileSize(audioData.length);
+    //     fileUpload.setCategory(FileUpload.FileCategory.AUDIO);
+    //     fileUpload.setGridFsFileId(fileId.toString());
+    //     fileUpload.setDescription("TTS generated response");
+    //     fileUpload.setUploadedAt(LocalDateTime.now());
+    //     fileUpload.setProcessed(true);
+
+    //     FileUpload saved = fileUploadService.saveMetadata(fileUpload);
+
+    //     String audioUrl = "/api/files/audio/" + saved.getId();
+    //     log.info("TTS saved with URL: {}", audioUrl);
+
+    //     return audioUrl;
+    // }
     public String textToSpeech(String text, String userId) throws IOException {
-        log.info("Generating TTS for user: {}, text length: {}", userId, text.length());
-
-        // Truncate long text
-        if (text.length() > 500) {
-            text = text.substring(0, 500) + "...";
-        }
-
-        byte[] audioData;
-
-        if ("google".equalsIgnoreCase(ttsService)) {
-            audioData = googleTTS(text);
-        } else {
-            audioData = elevenLabsTTS(text);
-        }
-
-        if (audioData == null || audioData.length == 0) {
-            throw new IOException("TTS failed - no audio generated");
-        }
-
-        // Save to GridFS
-        String filename = "tts_" + userId + "_" + System.currentTimeMillis() + ".mp3";
-        ObjectId fileId = gridFsTemplate.store(
-                new ByteArrayInputStream(audioData),
-                filename,
-                "audio/mpeg"
-        );
-
-        // Create file record
-        FileUpload fileUpload = new FileUpload();
-        fileUpload.setUserId(userId);
-        fileUpload.setFileName(filename);
-        fileUpload.setOriginalFileName(filename);
-        fileUpload.setFileType("audio/mpeg");
-        fileUpload.setFileSize(audioData.length);
-        fileUpload.setCategory(FileUpload.FileCategory.AUDIO);
-        fileUpload.setGridFsFileId(fileId.toString());
-        fileUpload.setDescription("TTS generated response");
-        fileUpload.setUploadedAt(LocalDateTime.now());
-        fileUpload.setProcessed(true);
-
-        FileUpload saved = fileUploadService.saveMetadata(fileUpload);
-
-        String audioUrl = "/api/files/audio/" + saved.getId();
-        log.info("TTS saved with URL: {}", audioUrl);
-
-        return audioUrl;
+        // TTS disabled — text-only mode
+        return null;
     }
 
     /**

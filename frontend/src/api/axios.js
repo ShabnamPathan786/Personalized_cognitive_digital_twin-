@@ -8,6 +8,17 @@ const axiosInstance = axios.create({
     withCredentials: true, // Important for session-based auth
 });
 
+const shouldBroadcastUnauthorized = (error) => {
+    const status = error?.response?.status;
+    const url = error?.config?.url || '';
+
+    if (status !== 401) {
+        return false;
+    }
+
+    return !url.includes('/auth/login') && !url.includes('/auth/register');
+};
+
 // Request interceptor
 axiosInstance.interceptors.request.use(
     (config) => {
@@ -24,7 +35,13 @@ axiosInstance.interceptors.response.use(
         return response;
     },
     (error) => {
-        
+        if (typeof window !== 'undefined' && shouldBroadcastUnauthorized(error)) {
+            window.dispatchEvent(
+                new CustomEvent('auth:unauthorized', {
+                    detail: { url: error?.config?.url || '' },
+                })
+            );
+        }
         return Promise.reject(error);
     }
 );

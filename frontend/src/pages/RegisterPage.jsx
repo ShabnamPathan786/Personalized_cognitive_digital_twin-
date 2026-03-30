@@ -94,7 +94,6 @@ const RegisterPage = () => {
             // Show detailed error message from backend
             setError(result.message || 'Registration failed. Please try again.');
         }
-
         setLoading(false);
     };
 

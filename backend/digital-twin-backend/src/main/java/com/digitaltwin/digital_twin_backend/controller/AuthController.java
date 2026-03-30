@@ -6,13 +6,18 @@ import com.digitaltwin.digital_twin_backend.dto.LoginRequest;
 import com.digitaltwin.digital_twin_backend.dto.AuthResponse;
 import com.digitaltwin.digital_twin_backend.dto.UserDTO;
 import com.digitaltwin.digital_twin_backend.model.User;
+import com.digitaltwin.digital_twin_backend.scheduler.MedicationScheduler;
 import com.digitaltwin.digital_twin_backend.security.CustomUserDetails;
 import com.digitaltwin.digital_twin_backend.service.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -24,7 +29,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.web.bind.annotation.*;
 
-
 /**
  * Authentication Controller
  * REST API endpoints for user authentication
@@ -34,7 +38,7 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
 public class AuthController {
-
+    private static final Logger logger = LoggerFactory.getLogger(MedicationScheduler.class);
     private final AuthService authService;
     private final AuthenticationManager authenticationManager;
 
@@ -61,15 +65,20 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<AuthResponse>> login(
             @Valid @RequestBody LoginRequest request,
-            HttpServletRequest httpRequest) {
+            HttpServletRequest httpRequest,
+            HttpServletResponse httpResponse) {
         try {
+            // Add this debug line
+            System.out.println("===== AUTH CONTROLLER HIT =====");
+            System.out.println("Method: " + httpRequest.getMethod());
+            System.out.println("URI: " + httpRequest.getRequestURI());
+            System.out.println("Content-Type: " + httpRequest.getContentType());
+            System.out.println("================================");
             // Authenticate user
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
                             request.getUsernameOrEmail(),
-                            request.getPassword()
-                    )
-            );
+                            request.getPassword()));
 
             // Set authentication in security context
             SecurityContext securityContext = SecurityContextHolder.getContext();
@@ -90,8 +99,7 @@ public class AuthController {
             AuthResponse response = new AuthResponse(
                     "Login successful",
                     user,
-                    session.getId()
-            );
+                    session.getId());
 
             return ResponseEntity.ok(ApiResponse.success("Login successful", response));
 
@@ -190,8 +198,7 @@ public class AuthController {
             authService.changePassword(
                     userDetails.getId(),
                     request.getOldPassword(),
-                    request.getNewPassword()
-            );
+                    request.getNewPassword());
 
             return ResponseEntity.ok(ApiResponse.success("Password changed successfully", null));
         } catch (RuntimeException e) {
@@ -243,8 +250,7 @@ public class AuthController {
                     isAuthenticated,
                     session.getMaxInactiveInterval(),
                     session.getCreationTime(),
-                    session.getLastAccessedTime()
-            );
+                    session.getLastAccessedTime());
 
             return ResponseEntity.ok(ApiResponse.success("Session active", info));
         }
@@ -261,7 +267,8 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.success("Auth service is running", "OK"));
     }
 
-    // Inner DTOs (only for profile, password, session - not for login/register/auth)
+    // Inner DTOs (only for profile, password, session - not for
+    // login/register/auth)
     @Data
     public static class UpdateProfileRequest {
         private String fullName;
@@ -284,7 +291,7 @@ public class AuthController {
         private long lastAccessedTime;
 
         public SessionInfo(String sessionId, boolean authenticated, int maxInactiveInterval,
-                           long creationTime, long lastAccessedTime) {
+                long creationTime, long lastAccessedTime) {
             this.sessionId = sessionId;
             this.authenticated = authenticated;
             this.maxInactiveInterval = maxInactiveInterval;

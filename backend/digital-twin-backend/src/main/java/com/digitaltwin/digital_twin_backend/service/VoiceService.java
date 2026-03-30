@@ -4,7 +4,11 @@ import com.digitaltwin.digital_twin_backend.dto.ConfidenceScore;
 import com.digitaltwin.digital_twin_backend.dto.Intent;
 import com.digitaltwin.digital_twin_backend.dto.VoiceResponse;
 import com.digitaltwin.digital_twin_backend.model.AudioChunk;
+import com.digitaltwin.digital_twin_backend.model.Medication;
+import com.digitaltwin.digital_twin_backend.model.Note;
+import com.digitaltwin.digital_twin_backend.model.Routine;
 import com.digitaltwin.digital_twin_backend.model.VoiceInteraction;
+import com.digitaltwin.digital_twin_backend.repository.RoutineRepository;
 import com.digitaltwin.digital_twin_backend.repository.VoiceInteractionRepository;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -20,14 +24,28 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.TextStyle;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.*;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class VoiceService {
+
+    private enum DisplayLanguage {
+        ENGLISH,
+        HINDI_DEVANAGARI
+    }
 
     private final VoiceInteractionRepository interactionRepository;
     private final LLMService llmService;
@@ -36,6 +54,11 @@ public class VoiceService {
     private final ConfidenceScorer confidenceScorer;
     private final IntentClassifier intentClassifier;
     private final ContextRetrievalService contextRetrievalService;
+
+    // ✅ ADD: Repositories for personal assistant
+    private final com.digitaltwin.digital_twin_backend.repository.NoteRepository noteRepository;
+    private final com.digitaltwin.digital_twin_backend.repository.MedicationRepository medicationRepository;
+    private final RoutineRepository routineRepository;
 
     @Value("${app.assemblyai.api.key}")
     private String assemblyAIApiKey;
@@ -58,6 +81,13 @@ public class VoiceService {
 
     @PostConstruct
     public void init() {
+        // Log API key status (masked)
+        if (assemblyAIApiKey == null || assemblyAIApiKey.isBlank() || assemblyAIApiKey.equals("your_key_here")) {
+            log.error("❌ AssemblyAI API Key NOT configured! Transcription will fail.");
+        } else {
+            log.info("✅ AssemblyAI API Key configured: {}...", assemblyAIApiKey.substring(0, 4));
+        }
+
         // For audio chunk processing - lightweight, fast
         chunkProcessorExecutor = Executors.newFixedThreadPool(5, r -> {
             Thread t = new Thread(r);
@@ -107,43 +137,30 @@ public class VoiceService {
         }
     }
 
-    /**
-     * Process incoming audio chunk - COMPLETELY NON-BLOCKING
-     * WebSocket thread sirf yeh call karta hai aur turant free ho jata hai
-     */
     public void processAudioChunk(String sessionId, String userId, AudioChunk chunk) {
-        // ✅ Lightweight validation only - audio stays in VoiceSession buffer
         log.debug("Received chunk {} for session {} ({} bytes)",
                 chunk.getSequenceNumber(), sessionId, chunk.getChunkSizeBytes());
 
-        // Optional: Add chunk sequencing validation here if needed
         if (chunk.getSequenceNumber() < 0) {
             log.warn("Invalid sequence number for chunk: {}", chunk.getSequenceNumber());
         }
     }
 
-    /**
-     * Process complete voice - FULLY ASYNC, RETURNS IMMEDIATELY
-     * ✅ Fixed: Now accepts audioData directly instead of looking up from map
-     */
     public CompletableFuture<VoiceResponse> processCompleteVoice(
             String sessionId,
             String userId,
             String userType,
             String mode,
-            byte[] audioData) { // ✅ 5th parameter added
+            byte[] audioData) {
 
         log.info("Starting voice processing for session: {} ({} bytes)",
                 sessionId, audioData != null ? audioData.length : 0);
 
-        // Create future that will complete when processing is done
         CompletableFuture<VoiceResponse> future = new CompletableFuture<>();
         processingFutures.put(sessionId, future);
 
-        // Submit transcription task to dedicated executor
         transcriptionExecutor.submit(() -> {
             try {
-                // ✅ Pass audioData to processVoiceSync
                 VoiceResponse response = processVoiceSync(sessionId, userId, userType, mode, audioData);
                 future.complete(response);
             } catch (Exception e) {
@@ -152,27 +169,17 @@ public class VoiceService {
                         "Processing failed. Kripya phir se koshish karein."));
             } finally {
                 processingFutures.remove(sessionId);
-                // ✅ Removed: audioBuffers.remove(sessionId); — field doesn't exist anymore
                 pendingInteractions.remove(sessionId);
             }
         });
 
-        // Return immediately - WebSocket thread is FREE!
         return future;
     }
 
-    /**
-     * Synchronous voice processing (runs in background thread)
-     */
-    /**
-     * Synchronous voice processing (runs in background thread)
-     * ✅ Fixed: Now accepts audioData directly as parameter
-     */
     private VoiceResponse processVoiceSync(String sessionId, String userId,
             String userType, String mode,
-            byte[] audioData) { // ✅ 5th parameter added
+            byte[] audioData) {
 
-        // ✅ Use the passed audioData directly — no lookup from map needed
         if (audioData == null || audioData.length == 0) {
             log.warn("No audio received for session: {}", sessionId);
             return createErrorResponse(sessionId, "No audio received",
@@ -182,12 +189,41 @@ public class VoiceService {
         try {
             log.info("Processing {} bytes for session {}", audioData.length, sessionId);
 
-            // Step 1: Transcribe (blocks but in background thread)
-            String transcription = transcribeAudio(audioData);
+            // Step 1: Transcribe
+            String rawTranscription = transcribeAudio(audioData);
+            DisplayLanguage displayLanguage = detectDisplayLanguage(rawTranscription);
+            String transcription = normalizeTextForDisplay(rawTranscription, displayLanguage, mode, true);
 
             if (transcription == null || transcription.trim().isEmpty()) {
                 return createErrorResponse(sessionId, "Empty transcription",
                         "Kuch samajh nahi aaya. Kripya phir se bolein.");
+            }
+
+            if (!rawTranscription.equals(transcription)) {
+                log.info("Normalized transcription for session {} from [{}] to [{}]", sessionId, rawTranscription, transcription);
+            } else {
+                log.info("Transcription for session {}: {}", sessionId, transcription);
+            }
+
+            if (isGreetingQuery(transcription)) {
+                String greetingResponse = buildGreetingResponse(userType);
+                log.info("Greeting shortcut matched for session {}", sessionId);
+                String audioUrl = ttsService.textToSpeech(greetingResponse, userId);
+                return adaptVoiceResponseForDisplay(
+                        VoiceResponse.success(sessionId, transcription, greetingResponse, audioUrl),
+                        displayLanguage,
+                        mode);
+            }
+
+            // ✅ NEW: Check if it's a personal assistant query first
+            String personalResponse = handlePersonalAssistantQuery(transcription, userId, userType, mode);
+            if (personalResponse != null) {
+                log.info("Personal assistant handled query for user {}", userId);
+                String audioUrl = ttsService.textToSpeech(personalResponse, userId);
+                return adaptVoiceResponseForDisplay(
+                        VoiceResponse.success(sessionId, transcription, personalResponse, audioUrl),
+                        displayLanguage,
+                        mode);
             }
 
             // Step 2: Classify intent
@@ -200,9 +236,10 @@ public class VoiceService {
             ConfidenceScore confidence = confidenceScorer.calculate(
                     transcription, context, intent, userType);
 
-            // Step 5: Generate response based on confidence
-            return generateFinalResponse(transcription, context, userType, mode,
+            // Step 5: Generate response
+            VoiceResponse response = generateFinalResponse(transcription, context, userType, mode,
                     userId, sessionId, confidence);
+            return adaptVoiceResponseForDisplay(response, displayLanguage, mode);
 
         } catch (Exception e) {
             log.error("Voice processing error: {}", e.getMessage(), e);
@@ -211,19 +248,407 @@ public class VoiceService {
         }
     }
 
-    /**
-     * Generate final response using appropriate executor
-     */
+    private boolean isGreetingQuery(String query) {
+        if (query == null) {
+            return false;
+        }
+
+        String normalized = query
+                .toLowerCase(Locale.ROOT)
+                .replaceAll("[\\p{Punct}]", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+
+        if (normalized.isEmpty()) {
+            return false;
+        }
+
+        List<String> greetingPhrases = List.of(
+                "hi",
+                "hello",
+                "hey",
+                "helo",
+                "hlo",
+                "hallo",
+                "namaste",
+                "hello hello",
+                "helo helo",
+                "هلو",
+                "هلو هلو",
+                "مرحبا",
+                "हेलो",
+                "हैलो",
+                "good morning",
+                "good afternoon",
+                "good evening",
+                "how are you",
+                "kaise ho",
+                "kaise ho tum");
+
+        return greetingPhrases.stream().anyMatch(phrase ->
+                normalized.equals(phrase)
+                        || normalized.startsWith(phrase + " ")
+                        || normalized.endsWith(" " + phrase)
+                        || normalized.contains(" " + phrase + " "));
+    }
+
+    private DisplayLanguage detectDisplayLanguage(String text) {
+        if (text == null || text.isBlank()) {
+            return DisplayLanguage.ENGLISH;
+        }
+
+        if (containsDevanagari(text) || containsArabicScript(text) || looksLikeRomanHindi(text)) {
+            return DisplayLanguage.HINDI_DEVANAGARI;
+        }
+
+        return DisplayLanguage.ENGLISH;
+    }
+
+    private VoiceResponse adaptVoiceResponseForDisplay(VoiceResponse response,
+            DisplayLanguage displayLanguage,
+            String mode) {
+        if (response == null) {
+            return null;
+        }
+
+        if (response.getTranscription() != null && !response.getTranscription().isBlank()) {
+            response.setTranscription(normalizeTextForDisplay(response.getTranscription(), displayLanguage, mode, true));
+        }
+
+        if (response.getTextResponse() != null && !response.getTextResponse().isBlank()) {
+            response.setTextResponse(normalizeTextForDisplay(response.getTextResponse(), displayLanguage, mode, false));
+        }
+
+        if (response.getUserFriendlyError() != null && !response.getUserFriendlyError().isBlank()) {
+            response.setUserFriendlyError(normalizeTextForDisplay(response.getUserFriendlyError(), displayLanguage, mode, false));
+        }
+
+        return response;
+    }
+
+    private String normalizeTextForDisplay(String text,
+            DisplayLanguage displayLanguage,
+            String mode,
+            boolean transcription) {
+        if (text == null || text.isBlank()) {
+            return text;
+        }
+
+        try {
+            if (displayLanguage == DisplayLanguage.HINDI_DEVANAGARI) {
+                if (containsDevanagari(text) && !containsArabicScript(text)) {
+                    return text.trim();
+                }
+                return rewriteTextForDisplay(text, mode, transcription, true);
+            }
+
+            if (containsArabicScript(text) || containsDevanagari(text) || looksLikeRomanHindi(text)) {
+                return rewriteTextForDisplay(text, mode, transcription, false);
+            }
+        } catch (Exception e) {
+            log.warn("Display normalization skipped for [{}]: {}", text, e.getMessage());
+        }
+
+        return text.trim();
+    }
+
+    private String rewriteTextForDisplay(String text, String mode, boolean transcription, boolean toHindi) throws IOException {
+        String instruction = toHindi
+                ? "Convert the following spoken text into natural Devanagari Hindi. Preserve names, medicine names, times, dates, and meaning exactly. Return only the converted text."
+                : "Rewrite the following text into natural English. Preserve names, medicine names, times, dates, and meaning exactly. Return only the rewritten text.";
+
+        if (transcription) {
+            instruction += " This is a speech transcription, so keep it as what the person said.";
+        } else {
+            instruction += " This is an assistant reply, so keep it clear and conversational.";
+        }
+
+        String prompt = instruction + "\n\nText:\n" + text;
+        String rewritten = llmService.callLLM(prompt, mode);
+        return rewritten == null || rewritten.isBlank() ? text.trim() : rewritten.trim();
+    }
+
+    private boolean containsDevanagari(String text) {
+        return text != null && text.matches(".*\\p{InDevanagari}.*");
+    }
+
+    private boolean containsArabicScript(String text) {
+        return text != null && text.matches(".*\\p{InArabic}.*");
+    }
+
+    private boolean looksLikeRomanHindi(String text) {
+        if (text == null) {
+            return false;
+        }
+
+        String normalized = text.toLowerCase(Locale.ROOT);
+        List<String> romanHindiMarkers = List.of(
+                "mujhe", "mera", "meri", "aaj", "kal", "kya", "kaise", "dawai", "davai",
+                "hai", "karna", "lena", "kab", "namaste", "yaad", "poochhiye"
+        );
+
+        long hits = romanHindiMarkers.stream()
+                .filter(normalized::contains)
+                .count();
+
+        return hits >= 2;
+    }
+
+    private String buildGreetingResponse(String userType) {
+        if ("DEMENTIA_PATIENT".equals(userType)) {
+            return "Namaste. Main yahan hoon. Aap kaise hain?";
+        }
+        return "Hello. I am here and ready to help. What would you like to know?";
+    }
+
+    private String handlePersonalAssistantQuery(String query, String userId, String userType, String mode) {
+        String lowerQuery = query.toLowerCase(Locale.ROOT);
+        boolean dementiaStyle = "dementia".equalsIgnoreCase(mode) || "DEMENTIA_PATIENT".equals(userType);
+
+        boolean isScheduleQuery = lowerQuery.contains("schedule") ||
+                lowerQuery.contains("dawai") ||
+                lowerQuery.contains("medicine") ||
+                lowerQuery.contains("tablet") ||
+                lowerQuery.contains("aaj kya hai") ||
+                lowerQuery.contains("reminder") ||
+                lowerQuery.contains("kaam") ||
+                lowerQuery.contains("task") ||
+                lowerQuery.contains("kya lena hai") ||
+                lowerQuery.contains("routine") ||
+                lowerQuery.contains("today") ||
+                lowerQuery.contains("what do i need") ||
+                lowerQuery.contains("what do i need today") ||
+                lowerQuery.contains("what should i do") ||
+                lowerQuery.contains("what should i take") ||
+                lowerQuery.contains("today plan") ||
+                lowerQuery.contains("my medications") ||
+                lowerQuery.contains("my medicine") ||
+                lowerQuery.contains("mera schedule") ||
+                lowerQuery.contains("meri dawai") ||
+                lowerQuery.contains("meri davai") ||
+                lowerQuery.contains("aaj mujhe kya karna hai") ||
+                lowerQuery.contains("aaj mujhe kya lena hai") ||
+                lowerQuery.contains("aaj ka schedule") ||
+                lowerQuery.contains("आज") ||
+                lowerQuery.contains("दवाई") ||
+                lowerQuery.contains("दवा") ||
+                lowerQuery.contains("गोली") ||
+                lowerQuery.contains("रूटीन") ||
+                lowerQuery.contains("शेड्यूल") ||
+                lowerQuery.contains("रिमाइंडर") ||
+                lowerQuery.contains("काम") ||
+                lowerQuery.contains("मुझे क्या करना है") ||
+                lowerQuery.contains("मुझे क्या लेना है");
+
+        if (!isScheduleQuery) {
+            return null;
+        }
+
+        LocalDate today = LocalDate.now();
+        LocalDateTime startOfDay = today.atStartOfDay();
+        LocalDateTime endOfDay = today.plusDays(1).atStartOfDay();
+
+        List<Medication> medications = new ArrayList<>();
+        List<Note> reminders = new ArrayList<>();
+        List<Routine> routines = new ArrayList<>();
+
+        try {
+            List<Medication> medicationResults = medicationRepository.findByUserIdAndActiveTrue(userId);
+            medications = medicationResults == null ? new ArrayList<>() : medicationResults.stream()
+                    .filter(this::isMedicationScheduledToday)
+                    .sorted(Comparator.comparing(this::firstScheduledTimeOrEndOfDay))
+                    .toList();
+        } catch (Exception e) {
+            log.warn("Could not fetch medications for user {}: {}", userId, e.getMessage());
+        }
+
+        try {
+            List<Note> reminderResults = noteRepository.findByUserIdAndTypeAndDateRange(
+                    userId, Note.NoteType.REMINDER, startOfDay, endOfDay);
+            reminders = reminderResults == null ? new ArrayList<>() : reminderResults;
+        } catch (Exception e) {
+            log.warn("Could not fetch reminders for user {}: {}", userId, e.getMessage());
+        }
+
+        try {
+            List<Routine> routineResults = routineRepository.findByUserIdAndActiveTrue(userId);
+            routines = routineResults == null ? new ArrayList<>() : routineResults.stream()
+                    .filter(this::isRoutineScheduledToday)
+                    .sorted(Comparator.comparing(Routine::getScheduledTime, Comparator.nullsLast(Comparator.naturalOrder())))
+                    .limit(4)
+                    .toList();
+        } catch (Exception e) {
+            log.warn("Could not fetch routines for user {}: {}", userId, e.getMessage());
+        }
+
+        return dementiaStyle
+                ? buildDementiaAssistantResponse(today, medications, reminders, routines)
+                : buildStandardAssistantResponse(today, medications, reminders, routines);
+    }
+
+    private String buildDementiaAssistantResponse(LocalDate today,
+            List<Medication> medications,
+            List<Note> reminders,
+            List<Routine> routines) {
+
+        StringBuilder response = new StringBuilder();
+        response.append("Aaj ")
+                .append(today.format(DateTimeFormatter.ofPattern("dd MMMM")))
+                .append(" hai. ");
+
+        if (!medications.isEmpty()) {
+            Medication nextMedication = medications.get(0);
+            response.append("Aapki dawai ");
+            response.append(nextMedication.getName());
+            if (nextMedication.getDosage() != null && !nextMedication.getDosage().isBlank()) {
+                response.append(" ").append(nextMedication.getDosage());
+            }
+            response.append(" ");
+            response.append(formatMedicationTimes(nextMedication, true));
+            response.append(". ");
+        } else {
+            response.append("Aaj koi dawai scheduled nahi hai. ");
+        }
+
+        if (!routines.isEmpty()) {
+            Routine nextRoutine = routines.get(0);
+            response.append("Aaj aapko ");
+            response.append(nextRoutine.getActivityName());
+            if (nextRoutine.getScheduledTime() != null) {
+                response.append(" ")
+                        .append(nextRoutine.getScheduledTime().format(DateTimeFormatter.ofPattern("h:mm a")));
+            }
+            response.append(" karna hai. ");
+        }
+
+        if (!reminders.isEmpty()) {
+            response.append("Yaad rakhiye: ");
+            response.append(reminders.get(0).getTitle());
+            response.append(". ");
+        }
+
+        response.append("Kuch aur poochhiye?");
+        return response.toString();
+    }
+
+    private String buildStandardAssistantResponse(LocalDate today,
+            List<Medication> medications,
+            List<Note> reminders,
+            List<Routine> routines) {
+
+        StringBuilder response = new StringBuilder();
+        response.append("Here is your plan for ")
+                .append(today.getDayOfWeek().getDisplayName(TextStyle.FULL, Locale.ENGLISH))
+                .append(", ")
+                .append(today.format(DateTimeFormatter.ofPattern("dd MMMM")))
+                .append(". ");
+
+        if (!medications.isEmpty()) {
+            response.append("Your medications are: ");
+            for (int i = 0; i < Math.min(medications.size(), 3); i++) {
+                Medication medication = medications.get(i);
+                response.append(i + 1).append(") ")
+                        .append(medication.getName());
+                if (medication.getDosage() != null && !medication.getDosage().isBlank()) {
+                    response.append(" ").append(medication.getDosage());
+                }
+                response.append(" ")
+                        .append(formatMedicationTimes(medication, false))
+                        .append(". ");
+            }
+        } else {
+            response.append("You do not have any active medications scheduled today. ");
+        }
+
+        if (!routines.isEmpty()) {
+            response.append("Your upcoming routine items are: ");
+            for (int i = 0; i < Math.min(routines.size(), 3); i++) {
+                Routine routine = routines.get(i);
+                response.append(i + 1).append(") ")
+                        .append(routine.getActivityName());
+                if (routine.getScheduledTime() != null) {
+                    response.append(" at ")
+                            .append(routine.getScheduledTime().format(DateTimeFormatter.ofPattern("h:mm a")));
+                }
+                response.append(". ");
+            }
+        }
+
+        if (!reminders.isEmpty()) {
+            response.append("Your reminders today are: ");
+            for (int i = 0; i < Math.min(reminders.size(), 2); i++) {
+                Note reminder = reminders.get(i);
+                response.append(i + 1).append(") ")
+                        .append(reminder.getTitle());
+                response.append(". ");
+            }
+        }
+
+        response.append("Ask if you want the next medicine or full schedule.");
+        return response.toString();
+    }
+
+    private boolean isMedicationScheduledToday(Medication medication) {
+        if (!medication.isActive()) {
+            return false;
+        }
+
+        List<String> daysOfWeek = medication.getDaysOfWeek();
+        if (daysOfWeek == null || daysOfWeek.isEmpty()) {
+            return true;
+        }
+
+        String today = LocalDate.now().getDayOfWeek().name();
+        return daysOfWeek.stream().anyMatch(day -> day != null && day.equalsIgnoreCase(today));
+    }
+
+    private boolean isRoutineScheduledToday(Routine routine) {
+        if (!routine.isActive()) {
+            return false;
+        }
+
+        List<String> daysOfWeek = routine.getDaysOfWeek();
+        if (daysOfWeek == null || daysOfWeek.isEmpty()) {
+            return true;
+        }
+
+        String today = LocalDate.now().getDayOfWeek().name();
+        return daysOfWeek.stream().anyMatch(day -> day != null && day.equalsIgnoreCase(today));
+    }
+
+    private LocalTime firstScheduledTimeOrEndOfDay(Medication medication) {
+        if (medication.getScheduledTimes() == null || medication.getScheduledTimes().isEmpty()) {
+            return LocalTime.MAX;
+        }
+        return medication.getScheduledTimes().stream()
+                .min(LocalTime::compareTo)
+                .orElse(LocalTime.MAX);
+    }
+
+    private String formatMedicationTimes(Medication medication, boolean dementiaStyle) {
+        if (medication.getScheduledTimes() == null || medication.getScheduledTimes().isEmpty()) {
+            return dementiaStyle ? "aaj lena hai" : "should be taken today";
+        }
+
+        String times = medication.getScheduledTimes().stream()
+                .sorted()
+                .limit(dementiaStyle ? 1 : 3)
+                .map(time -> time.format(DateTimeFormatter.ofPattern("h:mm a")))
+                .collect(Collectors.joining(", "));
+
+        return dementiaStyle ? "ko " + times + " par lena hai" : "at " + times;
+    }
+
     private VoiceResponse generateFinalResponse(String transcription, String context,
             String userType, String mode,
             String userId, String sessionId,
             ConfidenceScore confidence) {
-
+        log.info("🎯 Intent: {}, Score: {}, High: {}",
+                confidence.getIntentType(), confidence.getScore(), confidence.isHighConfidence());
         try {
             if (confidence.isEmergency()) {
                 return handleEmergency(userId, transcription, sessionId);
             } else if (confidence.isHighConfidence()) {
-                // Use responseExecutor for LLM/TTS calls
                 CompletableFuture<VoiceResponse> future = CompletableFuture.supplyAsync(
                         () -> handleDirectLLM(transcription, context, userType, mode, userId, sessionId),
                         responseExecutor);
@@ -240,9 +665,6 @@ public class VoiceService {
         }
     }
 
-    /**
-     * Transcribe audio with timeout and retry
-     */
     private String transcribeAudio(byte[] audioData) throws Exception {
         File tempFile = null;
         int maxRetries = 2;
@@ -250,34 +672,35 @@ public class VoiceService {
 
         while (retryCount <= maxRetries) {
             try {
+                // ✅ Always use .webm — frontend sends webm
                 tempFile = File.createTempFile("audio_", ".webm");
                 Files.write(tempFile.toPath(), audioData);
+                log.info("Created temp file: {} ({} bytes)",
+                        tempFile.getAbsolutePath(), tempFile.length());
+
+                if (tempFile.length() < 1000) {
+                    throw new IOException("Audio file too small: " + tempFile.length() + " bytes");
+                }
 
                 String uploadUrl = uploadToAssemblyAI(tempFile);
                 String transcriptId = requestTranscription(uploadUrl);
-
-                return pollTranscriptionWithTimeout(transcriptId, 45); // 45 seconds max
+                return pollTranscriptionWithTimeout(transcriptId, 45);
 
             } catch (Exception e) {
                 retryCount++;
                 log.warn("Transcription attempt {} failed: {}", retryCount, e.getMessage());
-                if (retryCount > maxRetries) {
+                if (retryCount > maxRetries)
                     throw e;
-                }
-                Thread.sleep(1000 * retryCount); // Exponential backoff
+                Thread.sleep(1000 * retryCount);
             } finally {
                 if (tempFile != null && tempFile.exists()) {
                     tempFile.delete();
                 }
             }
         }
-
         throw new IOException("Transcription failed after retries");
     }
 
-    /**
-     * Poll transcription with timeout
-     */
     private String pollTranscriptionWithTimeout(String transcriptId, int timeoutSeconds)
             throws Exception {
 
@@ -297,18 +720,24 @@ public class VoiceService {
 
             try (Response response = httpClient.newCall(request).execute()) {
                 if (!response.isSuccessful()) {
+                    log.warn("Poll attempt {} failed: {}", attempts, response.code());
                     Thread.sleep(1000);
                     continue;
                 }
 
-                JsonObject json = gson.fromJson(response.body().string(), JsonObject.class);
+                String responseBody = response.body().string();
+                JsonObject json = gson.fromJson(responseBody, JsonObject.class);
                 String status = json.get("status").getAsString();
 
+                log.debug("Transcript status: {}", status);
+
                 if ("completed".equals(status)) {
-                    return json.get("text").getAsString();
+                    String text = json.get("text").getAsString();
+                    log.info("Transcription completed: {}", text.substring(0, Math.min(50, text.length())));
+                    return text;
                 } else if ("error".equals(status)) {
-                    throw new IOException("Transcription error: " +
-                            json.get("error").getAsString());
+                    String errorMsg = json.has("error") ? json.get("error").getAsString() : "Unknown error";
+                    throw new IOException("Transcription error: " + errorMsg);
                 }
 
                 Thread.sleep(1000);
@@ -319,11 +748,16 @@ public class VoiceService {
     }
 
     private String uploadToAssemblyAI(File audioFile) throws IOException {
-        RequestBody requestBody = new MultipartBody.Builder()
-                .setType(MultipartBody.FORM)
-                .addFormDataPart("file", audioFile.getName(),
-                        RequestBody.create(audioFile, MediaType.parse("audio/webm")))
-                .build();
+        log.info("Uploading to AssemblyAI: {} ({} bytes)", audioFile.getName(), audioFile.length());
+
+        // ✅ Raw binary upload — NOT multipart
+        // AssemblyAI /v2/upload expects raw bytes, not form-data
+        byte[] fileBytes = Files.readAllBytes(audioFile.toPath());
+
+        RequestBody requestBody = RequestBody.create(
+                fileBytes,
+                MediaType.parse("audio/webm") // explicit webm
+        );
 
         Request request = new Request.Builder()
                 .url("https://api.assemblyai.com/v2/upload")
@@ -332,33 +766,60 @@ public class VoiceService {
                 .build();
 
         try (Response response = httpClient.newCall(request).execute()) {
+            String responseBody = response.body().string();
+            log.info("Upload response: {} - {}", response.code(),
+                    responseBody.substring(0, Math.min(200, responseBody.length())));
+
             if (!response.isSuccessful()) {
-                throw new IOException("Upload failed: " + response.code());
+                throw new IOException("Upload failed: " + response.code() + " - " + responseBody);
             }
-            JsonObject json = gson.fromJson(response.body().string(), JsonObject.class);
+
+            JsonObject json = gson.fromJson(responseBody, JsonObject.class);
             return json.get("upload_url").getAsString();
         }
     }
 
+    /**
+     * ✅ FIXED: AssemblyAI v2 API - removed problematic language_code, added proper
+     * error handling
+     */
     private String requestTranscription(String audioUrl) throws IOException {
+        log.info("Requesting transcription for: {}...", audioUrl.substring(0, 50));
+
         JsonObject jsonBody = new JsonObject();
         jsonBody.addProperty("audio_url", audioUrl);
-        jsonBody.addProperty("language_code", "hi");
+
+        // ✅ FIX: Use correct model names - "universal-2" or "universal-3-pro"
+        com.google.gson.JsonArray speechModels = new com.google.gson.JsonArray();
+        speechModels.add("universal-2"); // or "universal-3-pro" for higher accuracy
+        jsonBody.add("speech_models", speechModels);
+
         jsonBody.addProperty("punctuate", true);
-        jsonBody.addProperty("format_text", true);
+        jsonBody.addProperty("language_detection", true);
+
+        String jsonString = jsonBody.toString();
+        log.debug("Request body: {}", jsonString);
 
         Request request = new Request.Builder()
                 .url("https://api.assemblyai.com/v2/transcript")
                 .header("authorization", assemblyAIApiKey)
-                .post(RequestBody.create(jsonBody.toString(),
-                        MediaType.parse("application/json")))
+                .header("content-type", "application/json")
+                .post(RequestBody.create(jsonString, MediaType.parse("application/json")))
                 .build();
 
         try (Response response = httpClient.newCall(request).execute()) {
+            String responseBody = response.body().string();
+            log.info("Transcription request response: {} - {}", response.code(),
+                    responseBody.substring(0, Math.min(200, responseBody.length())));
+
             if (!response.isSuccessful()) {
-                throw new IOException("Transcription request failed: " + response.code());
+                throw new IOException("Transcription request failed: " + response.code() + " - " + responseBody);
             }
-            JsonObject json = gson.fromJson(response.body().string(), JsonObject.class);
+
+            JsonObject json = gson.fromJson(responseBody, JsonObject.class);
+            if (!json.has("id")) {
+                throw new IOException("No transcript ID in response: " + responseBody);
+            }
             return json.get("id").getAsString();
         }
     }
@@ -397,6 +858,7 @@ public class VoiceService {
     }
 
     private VoiceResponse createErrorResponse(String sessionId, String error, String message) {
+        log.error("Creating error response for session {}: {}", sessionId, error);
         return VoiceResponse.builder()
                 .status(VoiceResponse.ResponseStatus.ERROR)
                 .interactionId(sessionId)
@@ -409,32 +871,34 @@ public class VoiceService {
         StringBuilder prompt = new StringBuilder();
 
         if ("DEMENTIA_PATIENT".equals(userType)) {
-            prompt.append("You are speaking to a dementia patient. ")
-                    .append("Use very simple Hindi/English words. ")
-                    .append("Short sentences (5-8 words). Be patient and gentle.\n\n");
+            prompt.append("You are a caring personal assistant for a dementia patient. ")
+                    .append("Use very simple Hindi or English. ")
+                    .append("Short sentences (5-8 words). ")
+                    .append("Be patient, gentle, and reassuring. ")
+                    .append("Reply in the same language as the patient's query. ")
+                    .append("If the patient speaks Hindi or Hinglish, answer in simple Hindi/Hinglish.\n\n");
         } else {
             prompt.append("You are a helpful AI assistant. ")
-                    .append("Provide clear, accurate information.\n\n");
+                    .append("Reply in the same language as the user's query. ")
+                    .append("If the query is in Hindi or Hinglish, answer in Hindi/Hinglish.\n\n");
         }
 
         if (context != null && !context.isEmpty()) {
-            prompt.append("Context from user's data:\n").append(context).append("\n\n");
+            prompt.append("Patient context:\n").append(context).append("\n\n");
         }
 
-        prompt.append("User said: \"").append(transcription).append("\"\n\nYour response:");
+        prompt.append("Patient asked: \"").append(transcription).append("\"\n\nYour response:");
         return prompt.toString();
     }
 
     public void cancelProcessing(String sessionId) {
-        // ✅ REMOVED: audioBuffers.remove(sessionId);
-        
         pendingInteractions.remove(sessionId);
-    
+
         CompletableFuture<VoiceResponse> future = processingFutures.remove(sessionId);
         if (future != null && !future.isDone()) {
             future.complete(createErrorResponse(sessionId, "Cancelled", "Processing cancelled"));
         }
-    
+
         log.info("Cancelled processing for session: {}", sessionId);
     }
 }

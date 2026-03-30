@@ -41,8 +41,7 @@ const LoginPage = () => {
         const result = await login(formData);
 
         if (result.success) {
-            
-            navigate('/dashboard');
+            navigate('/home');
         } else {
             setError(result.message || 'Login failed. Please try again.');
         }

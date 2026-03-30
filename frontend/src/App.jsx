@@ -4,7 +4,6 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 // Existing Pages
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
-import DashboardPage from './pages/DashboardPage';
 import FilesPage from './pages/FilesPage';
 import MedicationsPage from './pages/MedicationsPage';
 import EmergencyPage from './pages/EmergencyPage';
@@ -19,6 +18,7 @@ import HITLReviewDashboard from './components/HITLReviewDashboard';
 
 import './index.css';
 import LandingPage from './pages/LandingPage';
+import Home from './pages/DashboardPage';
 
 /* ==================== LOADING SPINNER ==================== */
 const LoadingSpinner = () => (
@@ -34,7 +34,7 @@ const LoadingSpinner = () => (
 const PublicRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
   if (loading) return <LoadingSpinner />;
-  if (isAuthenticated) return <Navigate to="/dashboard" replace />;
+  if (isAuthenticated) return <Navigate to="/home" replace />;
   return children;
 };
 
@@ -47,7 +47,7 @@ const OnboardingRoute = ({ children }) => {
   const isProfileIncomplete = !user?.fullName || !user?.phoneNumber;
   if (user?.userType === 'DEMENTIA_PATIENT' && isProfileIncomplete) return children;
 
-  return <Navigate to="/dashboard" replace />;
+  return <Navigate to="/home" replace />;
 };
 
 /* ==================== PROTECTED ROUTE ==================== */
@@ -69,7 +69,7 @@ const HITLReviewerRoute = ({ children }) => {
   const { user, isAuthenticated, loading } = useAuth();
   if (loading) return <LoadingSpinner />;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
-  if (user?.userType !== 'CAREGIVER') return <Navigate to="/dashboard" replace />;
+  if (user?.userType !== 'CAREGIVER') return <Navigate to="/home" replace />;
   return children;
 };
 
@@ -96,7 +96,7 @@ function AppRoutes() {
       <Route path="/profile-setup" element={<OnboardingRoute><ProfileSetup /></OnboardingRoute>} />
 
       {/* -------- PROTECTED PAGES -------- */}
-      <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+      <Route path="/home" element={<ProtectedRoute><Home /></ProtectedRoute>} />
       <Route path="/files" element={<ProtectedRoute><FilesPage /></ProtectedRoute>} />
       <Route path="/medications" element={<ProtectedRoute><MedicationsPage /></ProtectedRoute>} />
       <Route path="/emergency" element={<ProtectedRoute><EmergencyPage /></ProtectedRoute>} />
@@ -120,8 +120,8 @@ function AppRoutes() {
       <Route path="/hitl-dashboard" element={<HITLReviewerRoute><HITLReviewDashboard /></HITLReviewerRoute>} />
 
       {/* -------- DEFAULT -------- */}
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/" element={<Navigate to="/home" replace />} />
+      <Route path="*" element={<Navigate to="/home" replace />} />
     </Routes>
   );
 }

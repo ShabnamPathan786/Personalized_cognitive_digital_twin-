@@ -172,7 +172,7 @@ const CaregiverEmergencyView = () => {
                     <div className="flex justify-between items-center">
                         <div className="flex items-center">
                             <button
-                                onClick={() => navigate('/dashboard')}
+                                onClick={() => navigate('/home')}
                                 className="mr-4 text-gray-600 hover:text-gray-900"
                             >
                                 ← Back
