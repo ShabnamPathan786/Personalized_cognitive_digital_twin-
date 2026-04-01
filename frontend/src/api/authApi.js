@@ -12,12 +12,18 @@ export const authApi = {
     },
 
     // Login user
+    // In your authApi.js login function
     login: async (credentials) => {
         try {
+          console.log('Making POST request to:', axios.defaults.baseURL + '/auth/login');
+            console.log('With credentials:', axios.defaults.withCredentials);
             const response = await axios.post('/auth/login', credentials);
             return response.data;
         } catch (error) {
-            throw error
+            console.log("error:", error);
+            console.log("Request config:", error.config); // This will show the actual method used
+            throw error;
+
         }
     },
 

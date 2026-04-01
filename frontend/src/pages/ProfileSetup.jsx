@@ -93,7 +93,7 @@ const ProfileSetup = () => {
         try {
             const result = await updateProfile(profileData);
             if (result?.success) {
-                navigate('/dashboard');
+                navigate('/home');
             } else {
                 setErrors({ submit: result?.message || 'Failed to update profile' });
             }
