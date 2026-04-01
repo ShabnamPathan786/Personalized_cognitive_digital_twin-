@@ -194,7 +194,9 @@ const MedicationsPage = () => {
             <nav className="sticky top-0 z-50 bg-white border-b border-gray-200 shadow-sm">
                 <div className="max-w-6xl mx-auto px-4 h-12 flex items-center gap-3">
                     <button
+
                         onClick={() => navigate("/home")}
+
                         className="text-gray-400 hover:text-gray-800 font-bold text-lg leading-none"
                     >
                         ←
