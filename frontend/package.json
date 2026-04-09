@@ -10,12 +10,18 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@solana/wallet-adapter-base": "^0.9.27",
+    "@solana/wallet-adapter-react": "^0.15.39",
+    "@solana/wallet-adapter-react-ui": "^0.9.39",
+    "@solana/wallet-adapter-wallets": "^0.19.37",
     "@stomp/stompjs": "^7.3.0",
     "axios": "^1.13.4",
+    "buffer": "^6.0.3",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.13.0",
     "sockjs-client": "^1.6.1",
+    "vite-plugin-node-polyfills": "^0.26.0",
     "webstomp-client": "^1.2.6"
   },
   "devDependencies": {

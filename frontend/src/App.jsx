@@ -19,6 +19,7 @@ import HITLReviewDashboard from './components/HITLReviewDashboard';
 import './index.css';
 import LandingPage from './pages/LandingPage';
 import Home from './pages/DashboardPage';
+import { WalletContextProvider } from './contexts/WalletContext';
 
 /* ==================== LOADING SPINNER ==================== */
 const LoadingSpinner = () => (
@@ -74,19 +75,9 @@ const HITLReviewerRoute = ({ children }) => {
 };
 
 /* ==================== APP ROUTES ==================== */
-// ✅ FIX: AppRoutes is defined inside App so it renders inside both
-// Router and AuthProvider. Previously AuthProvider was inside Router,
-// meaning if AuthProvider ever needed to call useNavigate() internally
-// (e.g. to redirect after token expiry), it would fail because
-// useNavigate() requires a Router ancestor — and AuthProvider was
-// rendering before Router's context was available to its own children.
-//
-// Correct nesting order: Router → AuthProvider → Route components
-// This guarantees all routing hooks are available everywhere in the tree.
 function AppRoutes() {
   return (
     <Routes>
-
       {/* -------- PUBLIC -------- */}
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
@@ -127,15 +118,14 @@ function AppRoutes() {
 }
 
 /* ==================== MAIN APP ==================== */
-// ✅ FIX: Router wraps AuthProvider, not the other way around.
-// Before: <Router> → <AuthProvider> (AuthProvider cannot use routing hooks)
-// After:  <Router> → <AuthProvider> → <AppRoutes> (everything has Router context)
 export default function App() {
   return (
-    <Router>
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
-    </Router>
+    <WalletContextProvider>
+      <Router>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
+      </Router>
+    </WalletContextProvider>
   );
 }

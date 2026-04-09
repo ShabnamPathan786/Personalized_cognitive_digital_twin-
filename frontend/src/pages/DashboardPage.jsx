@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import axios from '../api/axios';
 import PatientNotesPreview from '../components/PatientNotesPreview';
+import Navbar from '../components/navbar';
 
 const getGreeting = () => {
   const h = new Date().getHours();
@@ -185,34 +186,11 @@ export default function Home() {
       )}
 
       {/* Navbar */}
-      <nav style={{
-        position: 'sticky', top: 0, zIndex: 50,
-        background: 'rgba(240,231,214,0.92)', backdropFilter: 'blur(12px)',
-        borderBottom: '1px solid var(--color-cream-dark)', padding: '0 5vw',
-      }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto', height: 'var(--nav-height)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--color-charcoal)' }}>
-            Digital<span style={{ color: 'var(--color-ember)' }}>Twin</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-              <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--color-sage)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 14 }}>
-                {firstName[0]?.toUpperCase()}
-              </div>
-              <span style={{ fontFamily: 'var(--font-body)', fontWeight: 600, fontSize: 'var(--text-sm)', color: 'var(--color-charcoal)' }}>{firstName}</span>
-            </div>
-            <button onClick={handleLogout} disabled={loading} style={{
-              fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-sm)',
-              background: 'var(--color-ember)', color: '#fff', border: 'none',
-              borderRadius: 'var(--radius-full)', padding: '8px 20px', cursor: 'pointer',
-              opacity: loading ? 0.6 : 1, transition: 'opacity 0.2s',
-            }}>
-              {loading ? 'Signing out...' : 'Sign out'}
-            </button>
-          </div>
-        </div>
-      </nav>
-
+      <Navbar
+        firstName={firstName}
+        handleLogout={handleLogout}
+        loading={loading}
+      />
       {/* Main */}
       <main style={{ maxWidth: 1200, margin: '0 auto', padding: '3rem 5vw 6rem' }}>
 
