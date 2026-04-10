@@ -88,6 +88,578 @@ const SectionHeading = ({ label, title }) => (
   </div>
 );
 
+// Blockchain Storage Modal Component
+const BlockchainStorageModal = ({ isOpen, onClose }) => {
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    phone_number: ''
+  });
+  const [errors, setErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+
+  const validateForm = () => {
+    const newErrors = {};
+    if (!formData.name.trim()) {
+      newErrors.name = 'Name is required';
+    } else if (formData.name.length > 50) {
+      newErrors.name = 'Name must be 50 characters or less';
+    }
+
+    if (!formData.email.trim()) {
+      newErrors.email = 'Email is required';
+    } else if (formData.email.length > 100) {
+      newErrors.email = 'Email must be 100 characters or less';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      newErrors.email = 'Please enter a valid email';
+    }
+
+    if (!formData.phone_number.trim()) {
+      newErrors.phone_number = 'Phone number is required';
+    } else if (formData.phone_number.length > 15) {
+      newErrors.phone_number = 'Phone must be 15 characters or less';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!validateForm()) return;
+    
+    setIsSubmitting(true);
+    // Simulate blockchain transaction delay
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    setIsSubmitting(false);
+    setShowSuccess(true);
+    
+    setTimeout(() => {
+      setShowSuccess(false);
+      onClose();
+      setFormData({ name: '', email: '', phone_number: '' });
+    }, 2000);
+  };
+
+  const handleChange = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: undefined }));
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div 
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 1000,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '20px',
+        animation: 'modalBackdropIn 0.3s ease',
+      }}
+    >
+      {/* Backdrop */}
+      <div 
+        onClick={onClose}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: 'rgba(0,0,0,0.6)',
+          backdropFilter: 'blur(8px)',
+          animation: 'modalFadeIn 0.3s ease',
+        }}
+      />
+
+      {/* Modal Content */}
+      <div 
+        style={{
+          position: 'relative',
+          background: 'var(--color-white)',
+          borderRadius: 'var(--radius-xl)',
+          width: '100%',
+          maxWidth: 480,
+          maxHeight: '90vh',
+          overflow: 'auto',
+          boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+          animation: 'modalSlideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+          border: '1px solid rgba(157,189,184,0.3)',
+        }}
+      >
+        {/* Header */}
+        <div style={{
+          padding: 'var(--space-6) var(--space-6) 0',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+        }}>
+          <div>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--space-3)',
+              marginBottom: 'var(--space-2)',
+            }}>
+              <div style={{
+                width: 48,
+                height: 48,
+                borderRadius: 'var(--radius-lg)',
+                background: 'linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 24,
+                boxShadow: '0 10px 20px -5px rgba(99,102,241,0.3)',
+              }}>
+                ⛓️
+              </div>
+              <div>
+                <h3 style={{
+                  fontFamily: 'var(--font-display)',
+                  fontSize: 22,
+                  fontWeight: 700,
+                  color: 'var(--color-charcoal)',
+                  margin: 0,
+                }}>
+                  Save to Blockchain
+                </h3>
+                <p style={{
+                  fontFamily: 'var(--font-body)',
+                  fontSize: 'var(--text-sm)',
+                  color: 'var(--color-charcoal-mid)',
+                  margin: '4px 0 0 0',
+                }}>
+                  Store your data securely on-chain
+                </p>
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: '8px',
+              borderRadius: 'var(--radius-md)',
+              color: 'var(--color-charcoal-mid)',
+              fontSize: 24,
+              lineHeight: 1,
+              transition: 'all 0.2s',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            onMouseEnter={e => {
+              e.target.style.background = 'var(--color-cream)';
+              e.target.style.color = 'var(--color-charcoal)';
+            }}
+            onMouseLeave={e => {
+              e.target.style.background = 'transparent';
+              e.target.style.color = 'var(--color-charcoal-mid)';
+            }}
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Form */}
+        {!showSuccess ? (
+          <form onSubmit={handleSubmit} style={{ padding: 'var(--space-6)' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
+              {/* Name Field */}
+              <div>
+                <label style={{
+                  display: 'block',
+                  fontFamily: 'var(--font-body)',
+                  fontSize: 'var(--text-sm)',
+                  fontWeight: 600,
+                  color: 'var(--color-charcoal)',
+                  marginBottom: 'var(--space-2)',
+                }}>
+                  Full Name
+                  <span style={{ 
+                    float: 'right', 
+                    fontWeight: 400, 
+                    color: formData.name.length > 45 ? 'var(--color-ember)' : 'var(--color-charcoal-mid)',
+                    fontSize: 'var(--text-xs)',
+                  }}>
+                    {formData.name.length}/50
+                  </span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => handleChange('name', e.target.value)}
+                  placeholder="Enter your full name"
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    fontFamily: 'var(--font-body)',
+                    fontSize: 'var(--text-md)',
+                    color: 'var(--color-charcoal)',
+                    background: errors.name ? '#FEF2F2' : 'var(--color-cream)',
+                    border: `2px solid ${errors.name ? '#FCA5A5' : 'transparent'}`,
+                    borderRadius: 'var(--radius-lg)',
+                    outline: 'none',
+                    transition: 'all 0.2s',
+                    boxSizing: 'border-box',
+                  }}
+                  onFocus={e => {
+                    e.target.style.borderColor = '#6366F1';
+                    e.target.style.background = 'var(--color-white)';
+                    e.target.style.boxShadow = '0 0 0 4px rgba(99,102,241,0.1)';
+                  }}
+                  onBlur={e => {
+                    e.target.style.borderColor = errors.name ? '#FCA5A5' : 'transparent';
+                    e.target.style.background = errors.name ? '#FEF2F2' : 'var(--color-cream)';
+                    e.target.style.boxShadow = 'none';
+                  }}
+                />
+                {errors.name && (
+                  <div style={{
+                    marginTop: 'var(--space-1)',
+                    fontFamily: 'var(--font-body)',
+                    fontSize: 'var(--text-xs)',
+                    color: 'var(--color-ember)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}>
+                    ⚠️ {errors.name}
+                  </div>
+                )}
+              </div>
+
+              {/* Email Field */}
+              <div>
+                <label style={{
+                  display: 'block',
+                  fontFamily: 'var(--font-body)',
+                  fontSize: 'var(--text-sm)',
+                  fontWeight: 600,
+                  color: 'var(--color-charcoal)',
+                  marginBottom: 'var(--space-2)',
+                }}>
+                  Email Address
+                  <span style={{ 
+                    float: 'right', 
+                    fontWeight: 400, 
+                    color: formData.email.length > 90 ? 'var(--color-ember)' : 'var(--color-charcoal-mid)',
+                    fontSize: 'var(--text-xs)',
+                  }}>
+                    {formData.email.length}/100
+                  </span>
+                </label>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => handleChange('email', e.target.value)}
+                  placeholder="your@email.com"
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    fontFamily: 'var(--font-body)',
+                    fontSize: 'var(--text-md)',
+                    color: 'var(--color-charcoal)',
+                    background: errors.email ? '#FEF2F2' : 'var(--color-cream)',
+                    border: `2px solid ${errors.email ? '#FCA5A5' : 'transparent'}`,
+                    borderRadius: 'var(--radius-lg)',
+                    outline: 'none',
+                    transition: 'all 0.2s',
+                    boxSizing: 'border-box',
+                  }}
+                  onFocus={e => {
+                    e.target.style.borderColor = '#6366F1';
+                    e.target.style.background = 'var(--color-white)';
+                    e.target.style.boxShadow = '0 0 0 4px rgba(99,102,241,0.1)';
+                  }}
+                  onBlur={e => {
+                    e.target.style.borderColor = errors.email ? '#FCA5A5' : 'transparent';
+                    e.target.style.background = errors.email ? '#FEF2F2' : 'var(--color-cream)';
+                    e.target.style.boxShadow = 'none';
+                  }}
+                />
+                {errors.email && (
+                  <div style={{
+                    marginTop: 'var(--space-1)',
+                    fontFamily: 'var(--font-body)',
+                    fontSize: 'var(--text-xs)',
+                    color: 'var(--color-ember)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}>
+                    ⚠️ {errors.email}
+                  </div>
+                )}
+              </div>
+
+              {/* Phone Field */}
+              <div>
+                <label style={{
+                  display: 'block',
+                  fontFamily: 'var(--font-body)',
+                  fontSize: 'var(--text-sm)',
+                  fontWeight: 600,
+                  color: 'var(--color-charcoal)',
+                  marginBottom: 'var(--space-2)',
+                }}>
+                  Phone Number
+                  <span style={{ 
+                    float: 'right', 
+                    fontWeight: 400, 
+                    color: formData.phone_number.length > 12 ? 'var(--color-ember)' : 'var(--color-charcoal-mid)',
+                    fontSize: 'var(--text-xs)',
+                  }}>
+                    {formData.phone_number.length}/15
+                  </span>
+                </label>
+                <input
+                  type="tel"
+                  value={formData.phone_number}
+                  onChange={(e) => handleChange('phone_number', e.target.value)}
+                  placeholder="+1 234 567 8900"
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    fontFamily: 'var(--font-body)',
+                    fontSize: 'var(--text-md)',
+                    color: 'var(--color-charcoal)',
+                    background: errors.phone_number ? '#FEF2F2' : 'var(--color-cream)',
+                    border: `2px solid ${errors.phone_number ? '#FCA5A5' : 'transparent'}`,
+                    borderRadius: 'var(--radius-lg)',
+                    outline: 'none',
+                    transition: 'all 0.2s',
+                    boxSizing: 'border-box',
+                  }}
+                  onFocus={e => {
+                    e.target.style.borderColor = '#6366F1';
+                    e.target.style.background = 'var(--color-white)';
+                    e.target.style.boxShadow = '0 0 0 4px rgba(99,102,241,0.1)';
+                  }}
+                  onBlur={e => {
+                    e.target.style.borderColor = errors.phone_number ? '#FCA5A5' : 'transparent';
+                    e.target.style.background = errors.phone_number ? '#FEF2F2' : 'var(--color-cream)';
+                    e.target.style.boxShadow = 'none';
+                  }}
+                />
+                {errors.phone_number && (
+                  <div style={{
+                    marginTop: 'var(--space-1)',
+                    fontFamily: 'var(--font-body)',
+                    fontSize: 'var(--text-xs)',
+                    color: 'var(--color-ember)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}>
+                    ⚠️ {errors.phone_number}
+                  </div>
+                )}
+              </div>
+
+              {/* Info Box */}
+              <div style={{
+                background: 'linear-gradient(135deg, #EEF2FF 0%, #F3F0FF 100%)',
+                borderRadius: 'var(--radius-lg)',
+                padding: 'var(--space-4)',
+                border: '1px solid #C7D2FE',
+              }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 'var(--space-3)',
+                }}>
+                  <span style={{ fontSize: 20 }}>🔒</span>
+                  <div>
+                    <div style={{
+                      fontFamily: 'var(--font-display)',
+                      fontSize: 14,
+                      fontWeight: 600,
+                      color: '#3730A3',
+                      marginBottom: '4px',
+                    }}>
+                      Secure Storage
+                    </div>
+                    <div style={{
+                      fontFamily: 'var(--font-body)',
+                      fontSize: 'var(--text-xs)',
+                      color: '#5B21B6',
+                      lineHeight: 1.5,
+                    }}>
+                      Your data will be stored permanently on the Solana blockchain. 
+                      This action requires a small transaction fee.
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div style={{
+                display: 'flex',
+                gap: 'var(--space-3)',
+                marginTop: 'var(--space-2)',
+              }}>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  style={{
+                    flex: 1,
+                    padding: '14px 24px',
+                    fontFamily: 'var(--font-body)',
+                    fontSize: 'var(--text-md)',
+                    fontWeight: 600,
+                    color: 'var(--color-charcoal)',
+                    background: 'var(--color-cream)',
+                    border: 'none',
+                    borderRadius: 'var(--radius-full)',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={e => {
+                    e.target.style.background = '#E5E7EB';
+                    e.target.style.transform = 'translateY(-1px)';
+                  }}
+                  onMouseLeave={e => {
+                    e.target.style.background = 'var(--color-cream)';
+                    e.target.style.transform = 'translateY(0)';
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  style={{
+                    flex: 2,
+                    padding: '14px 24px',
+                    fontFamily: 'var(--font-body)',
+                    fontSize: 'var(--text-md)',
+                    fontWeight: 600,
+                    color: '#fff',
+                    background: isSubmitting ? '#9CA3AF' : 'linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%)',
+                    border: 'none',
+                    borderRadius: 'var(--radius-full)',
+                    cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.2s',
+                    boxShadow: isSubmitting ? 'none' : '0 10px 20px -5px rgba(99,102,241,0.3)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                  }}
+                  onMouseEnter={e => {
+                    if (!isSubmitting) {
+                      e.target.style.transform = 'translateY(-2px)';
+                      e.target.style.boxShadow = '0 15px 30px -5px rgba(99,102,241,0.4)';
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    if (!isSubmitting) {
+                      e.target.style.transform = 'translateY(0)';
+                      e.target.style.boxShadow = '0 10px 20px -5px rgba(99,102,241,0.3)';
+                    }
+                  }}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <div style={{
+                        width: 18,
+                        height: 18,
+                        border: '2px solid rgba(255,255,255,0.3)',
+                        borderTopColor: '#fff',
+                        borderRadius: '50%',
+                        animation: 'spin 0.8s linear infinite',
+                      }} />
+                      Storing...
+                    </>
+                  ) : (
+                    <>
+                      ⛓️ Store on Chain
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </form>
+        ) : (
+          /* Success State */
+          <div style={{
+            padding: 'var(--space-8)',
+            textAlign: 'center',
+            animation: 'modalFadeIn 0.5s ease',
+          }}>
+            <div style={{
+              width: 80,
+              height: 80,
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #10B981 0%, #34D399 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto var(--space-5)',
+              fontSize: 40,
+              boxShadow: '0 20px 40px -10px rgba(16,185,129,0.4)',
+              animation: 'successPop 0.5s cubic-bezier(0.16, 1, 0.3, 1)',
+            }}>
+              ✓
+            </div>
+            <h3 style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: 24,
+              fontWeight: 700,
+              color: 'var(--color-charcoal)',
+              marginBottom: 'var(--space-2)',
+            }}>
+              Stored Successfully!
+            </h3>
+            <p style={{
+              fontFamily: 'var(--font-body)',
+              fontSize: 'var(--text-md)',
+              color: 'var(--color-charcoal-mid)',
+              margin: 0,
+            }}>
+              Your information has been saved to the blockchain.
+            </p>
+          </div>
+        )}
+      </div>
+
+      <style>{`
+        @keyframes modalBackdropIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes modalFadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes modalSlideIn {
+          from { 
+            opacity: 0;
+            transform: translateY(20px) scale(0.95);
+          }
+          to { 
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+        @keyframes successPop {
+          0% { transform: scale(0); }
+          50% { transform: scale(1.1); }
+          100% { transform: scale(1); }
+        }
+      `}</style>
+    </div>
+  );
+};
+
 export default function Home() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -99,6 +671,7 @@ export default function Home() {
   const [showCaregivers, setShowCaregivers] = useState(false);
   const [error, setError] = useState('');
   const [copyToast, setCopyToast] = useState('');
+  const [showBlockchainModal, setShowBlockchainModal] = useState(false);
   const toastTimer = useRef(null);
 
   useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
@@ -152,6 +725,7 @@ export default function Home() {
     { icon: '📝', title: 'My Notes', desc: 'Write down important things', onClick: () => navigate('/notes'), color: '#6A9E98' },
     { icon: '📁', title: 'My Files', desc: 'Store your documents safely', onClick: () => navigate('/files'), color: '#EA2E00' },
     { icon: '🤖', title: 'Simple Summaries', desc: 'Understand documents easily', onClick: () => navigate('/summarization'), color: '#6A9E98' },
+    { icon: '⛓️', title: 'Save Data On Chain', desc: 'Store info on blockchain securely', onClick: () => setShowBlockchainModal(true), color: '#6366F1' },
   ];
 
   const caregiverCards = [
@@ -164,6 +738,7 @@ export default function Home() {
     { icon: '🤖', title: 'AI Summaries', desc: 'Get smart document summaries', onClick: () => navigate('/summarization'), color: '#9DBDB8' },
     { icon: '📝', title: 'Notes', desc: 'Personal notes & reminders', onClick: () => navigate('/notes'), color: '#6A9E98' },
     { icon: '🎤', title: 'Voice Assistant', desc: 'Interact with AI via voice', onClick: () => navigate('/voice-helper'), color: '#EA2E00' },
+    { icon: '⛓️', title: 'Save Data On Chain', desc: 'Store info on blockchain securely', onClick: () => setShowBlockchainModal(true), color: '#6366F1' },
   ];
 
   return (
@@ -184,6 +759,12 @@ export default function Home() {
           zIndex: 999, animation: 'toastIn 0.3s ease', boxShadow: 'var(--shadow-lg)',
         }}>{copyToast}</div>
       )}
+
+      {/* Blockchain Modal */}
+      <BlockchainStorageModal 
+        isOpen={showBlockchainModal} 
+        onClose={() => setShowBlockchainModal(false)} 
+      />
 
       {/* Navbar */}
       <Navbar
