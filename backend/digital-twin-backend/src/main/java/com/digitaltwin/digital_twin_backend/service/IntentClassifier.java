@@ -27,7 +27,8 @@ public class IntentClassifier {
                 "kya yaad hai", "kya bataya tha", "kya hua tha",
                 "कल क्या पढ़ा", "क्या लिखा था", "क्या नोट किया",
                 "क्या याद है", "क्या बताया था", "क्या हुआ था",
-                "what did i read", "what did i write", "what happened"));
+                "what did i read", "what did i write", "what happened",
+                "note", "notes", "summary", "summarized", "summarize"));
 
         // MEDICATION_QUERY patterns
         INTENT_PATTERNS.put("MEDICATION_QUERY", List.of(

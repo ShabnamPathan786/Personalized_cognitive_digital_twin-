@@ -211,8 +211,16 @@ public class VoiceWebSocketController {
             session.setCompletedAt(LocalDateTime.now());
 
             String mode;
-            if (payload != null && payload.containsKey("mode")) {
-                mode = payload.get("mode").toString();
+            String language = "auto";
+            if (payload != null) {
+                if (payload.containsKey("mode")) {
+                    mode = payload.get("mode").toString();
+                } else {
+                    mode = (userType == User.UserType.DEMENTIA_PATIENT) ? "dementia" : "standard";
+                }
+                if (payload.containsKey("language")) {
+                    language = payload.get("language").toString();
+                }
             } else {
                 mode = (userType == User.UserType.DEMENTIA_PATIENT) ? "dementia" : "standard";
             }
@@ -233,6 +241,7 @@ public class VoiceWebSocketController {
                     finalUserId,
                     finalUserType.name(),
                     mode,
+                    language,
                     audioData).thenAccept(response -> {
                         try {
                             if (principal != null) {
@@ -275,6 +284,97 @@ public class VoiceWebSocketController {
 
         } catch (Exception e) {
             log.error("❌ Error in stop handler: {}", e.getMessage(), e);
+        }
+    }
+
+    @MessageMapping("/voice.text")
+    public void handleTextQuery(Principal principal,
+            @Header("sessionId") String sessionId,
+            @Payload Map<String, Object> payload) {
+
+        try {
+            VoiceUserContext userContext = resolveUserContext(principal, payload, sessionId, null);
+            String userId = userContext.userId();
+            String username = userContext.username();
+            User.UserType userType = parseUserType(userContext.userType());
+
+            log.info("📝 Text query received - User: {}, Type: {}, Session: {}", username, userType, sessionId);
+
+            String text = payload != null && payload.get("text") != null ? payload.get("text").toString() : "";
+            if (text.trim().isEmpty()) {
+                messagingTemplate.convertAndSend(
+                        "/topic/voice.error/" + sessionId,
+                        Map.of("error", "Empty text query", "sessionId", sessionId));
+                return;
+            }
+
+            String mode;
+            String language = "auto";
+            if (payload != null) {
+                if (payload.containsKey("mode")) {
+                    mode = payload.get("mode").toString();
+                } else {
+                    mode = (userType == User.UserType.DEMENTIA_PATIENT) ? "dementia" : "standard";
+                }
+                if (payload.containsKey("language")) {
+                    language = payload.get("language").toString();
+                }
+            } else {
+                mode = (userType == User.UserType.DEMENTIA_PATIENT) ? "dementia" : "standard";
+            }
+
+            final String finalUserId = userId;
+            final String finalUsername = username;
+            final User.UserType finalUserType = userType;
+
+            voiceService.processCompleteText(
+                    sessionId,
+                    finalUserId,
+                    finalUserType.name(),
+                    mode,
+                    language,
+                    text).thenAccept(response -> {
+                        try {
+                            if (principal != null) {
+                                messagingTemplate.convertAndSendToUser(
+                                        finalUsername,
+                                        "/queue/voice.response",
+                                        response);
+                            } else {
+                                messagingTemplate.convertAndSend(
+                                        "/topic/voice.response/" + sessionId,
+                                        response);
+                            }
+                            log.info("✅ Text response sent to: {}", finalUsername);
+                        } catch (Exception e) {
+                            log.error("Failed to send text response: {}", e.getMessage());
+                        }
+                    }).exceptionally(throwable -> {
+                        log.error("❌ Text processing failed: {}", throwable.getMessage());
+                        try {
+                            Map<String, Object> errorResponse = Map.of(
+                                    "error", "Text processing failed",
+                                    "message", throwable.getMessage(),
+                                    "timestamp", System.currentTimeMillis());
+
+                            if (principal != null) {
+                                messagingTemplate.convertAndSendToUser(
+                                        finalUsername,
+                                        "/queue/voice.error",
+                                        errorResponse);
+                            } else {
+                                messagingTemplate.convertAndSend(
+                                        "/topic/voice.error/" + sessionId,
+                                        errorResponse);
+                            }
+                        } catch (Exception e) {
+                            log.error("Failed to send error: {}", e.getMessage());
+                        }
+                        return null;
+                    });
+
+        } catch (Exception e) {
+            log.error("❌ Error in text handler: {}", e.getMessage(), e);
         }
     }
 

@@ -151,6 +151,7 @@ public class VoiceService {
             String userId,
             String userType,
             String mode,
+            String language,
             byte[] audioData) {
 
         log.info("Starting voice processing for session: {} ({} bytes)",
@@ -161,12 +162,12 @@ public class VoiceService {
 
         transcriptionExecutor.submit(() -> {
             try {
-                VoiceResponse response = processVoiceSync(sessionId, userId, userType, mode, audioData);
+                VoiceResponse response = processVoiceSync(sessionId, userId, userType, mode, language, audioData);
                 future.complete(response);
             } catch (Exception e) {
                 log.error("Voice processing failed: {}", e.getMessage(), e);
                 future.complete(createErrorResponse(sessionId, "Processing failed",
-                        "Processing failed. Kripya phir se koshish karein."));
+                        getLocalizedErrorMessage("PROCESSING_FAILED", language)));
             } finally {
                 processingFutures.remove(sessionId);
                 pendingInteractions.remove(sessionId);
@@ -177,32 +178,68 @@ public class VoiceService {
     }
 
     private VoiceResponse processVoiceSync(String sessionId, String userId,
-            String userType, String mode,
+            String userType, String mode, String language,
             byte[] audioData) {
 
         if (audioData == null || audioData.length == 0) {
             log.warn("No audio received for session: {}", sessionId);
             return createErrorResponse(sessionId, "No audio received",
-                    "Koi audio nahi mila. Kripya phir se bolein.");
+                    getLocalizedErrorMessage("NO_AUDIO", language));
         }
 
         try {
             log.info("Processing {} bytes for session {}", audioData.length, sessionId);
 
             // Step 1: Transcribe
-            String rawTranscription = transcribeAudio(audioData);
+            String rawTranscription = transcribeAudio(audioData, language);
+            return processTextInternally(sessionId, userId, userType, mode, language, rawTranscription);
+
+        } catch (Exception e) {
+            log.error("Voice processing error: {}", e.getMessage(), e);
+            return createErrorResponse(sessionId, e.getMessage(),
+                    getLocalizedErrorMessage("PROCESSING_FAILED", language));
+        }
+    }
+
+    public CompletableFuture<VoiceResponse> processCompleteText(
+            String sessionId, String userId, String userType, String mode, String language, String rawText) {
+
+        CompletableFuture<VoiceResponse> future = new CompletableFuture<>();
+        processingFutures.put(sessionId, future);
+
+        transcriptionExecutor.submit(() -> {
+            try {
+                VoiceResponse response = processTextInternally(sessionId, userId, userType, mode, language, rawText);
+                future.complete(response);
+            } catch (Exception e) {
+                log.error("Text processing failed: {}", e.getMessage(), e);
+                future.complete(createErrorResponse(sessionId, "Processing failed", 
+                        getLocalizedErrorMessage("PROCESSING_FAILED", language)));
+            } finally {
+                processingFutures.remove(sessionId);
+                pendingInteractions.remove(sessionId);
+            }
+        });
+
+        return future;
+    }
+
+    private VoiceResponse processTextInternally(String sessionId, String userId,
+            String userType, String mode, String language,
+            String rawTranscription) {
+        try {
             DisplayLanguage displayLanguage = detectDisplayLanguage(rawTranscription);
             String transcription = normalizeTextForDisplay(rawTranscription, displayLanguage, mode, true);
 
             if (transcription == null || transcription.trim().isEmpty()) {
                 return createErrorResponse(sessionId, "Empty transcription",
-                        "Kuch samajh nahi aaya. Kripya phir se bolein.");
+                        getLocalizedErrorMessage("EMPTY_TRANSCRIPTION", language));
             }
 
             if (!rawTranscription.equals(transcription)) {
-                log.info("Normalized transcription for session {} from [{}] to [{}]", sessionId, rawTranscription, transcription);
+                log.info("Normalized text for session {} from [{}] to [{}]", sessionId, rawTranscription, transcription);
             } else {
-                log.info("Transcription for session {}: {}", sessionId, transcription);
+                log.info("Text for session {}: {}", sessionId, transcription);
             }
 
             if (isGreetingQuery(transcription)) {
@@ -215,7 +252,7 @@ public class VoiceService {
                         mode);
             }
 
-            // ✅ NEW: Check if it's a personal assistant query first
+            // ✅ Check if it's a personal assistant query first
             String personalResponse = handlePersonalAssistantQuery(transcription, userId, userType, mode);
             if (personalResponse != null) {
                 log.info("Personal assistant handled query for user {}", userId);
@@ -238,13 +275,13 @@ public class VoiceService {
 
             // Step 5: Generate response
             VoiceResponse response = generateFinalResponse(transcription, context, userType, mode,
-                    userId, sessionId, confidence);
+                    userId, sessionId, confidence, language);
             return adaptVoiceResponseForDisplay(response, displayLanguage, mode);
 
         } catch (Exception e) {
-            log.error("Voice processing error: {}", e.getMessage(), e);
+            log.error("Core processing error: {}", e.getMessage(), e);
             return createErrorResponse(sessionId, e.getMessage(),
-                    "Processing failed. Kripya phir se koshish karein.");
+                    getLocalizedErrorMessage("PROCESSING_FAILED", language));
         }
     }
 
@@ -364,7 +401,8 @@ public class VoiceService {
         }
 
         String prompt = instruction + "\n\nText:\n" + text;
-        String rewritten = llmService.callLLM(prompt, mode);
+        String langParam = toHindi ? "Hindi" : "English";
+        String rewritten = llmService.callLLM(prompt, mode, langParam);
         return rewritten == null || rewritten.isBlank() ? text.trim() : rewritten.trim();
     }
 
@@ -396,7 +434,7 @@ public class VoiceService {
 
     private String buildGreetingResponse(String userType) {
         if ("DEMENTIA_PATIENT".equals(userType)) {
-            return "Namaste. Main yahan hoon. Aap kaise hain?";
+            return "नमस्ते। मैं यहाँ हूँ। आप कैसे हैं?";
         }
         return "Hello. I am here and ready to help. What would you like to know?";
     }
@@ -492,42 +530,42 @@ public class VoiceService {
             List<Routine> routines) {
 
         StringBuilder response = new StringBuilder();
-        response.append("Aaj ")
+        response.append("आज ")
                 .append(today.format(DateTimeFormatter.ofPattern("dd MMMM")))
-                .append(" hai. ");
+                .append(" है। ");
 
         if (!medications.isEmpty()) {
             Medication nextMedication = medications.get(0);
-            response.append("Aapki dawai ");
+            response.append("आपकी दवाई ");
             response.append(nextMedication.getName());
             if (nextMedication.getDosage() != null && !nextMedication.getDosage().isBlank()) {
                 response.append(" ").append(nextMedication.getDosage());
             }
             response.append(" ");
             response.append(formatMedicationTimes(nextMedication, true));
-            response.append(". ");
+            response.append("। ");
         } else {
-            response.append("Aaj koi dawai scheduled nahi hai. ");
+            response.append("आज कोई दवाई निर्धारित नहीं है। ");
         }
 
         if (!routines.isEmpty()) {
             Routine nextRoutine = routines.get(0);
-            response.append("Aaj aapko ");
+            response.append("आज आपको ");
             response.append(nextRoutine.getActivityName());
             if (nextRoutine.getScheduledTime() != null) {
                 response.append(" ")
                         .append(nextRoutine.getScheduledTime().format(DateTimeFormatter.ofPattern("h:mm a")));
             }
-            response.append(" karna hai. ");
+            response.append(" करना है। ");
         }
 
         if (!reminders.isEmpty()) {
-            response.append("Yaad rakhiye: ");
+            response.append("याद रखिए: ");
             response.append(reminders.get(0).getTitle());
-            response.append(". ");
+            response.append("। ");
         }
 
-        response.append("Kuch aur poochhiye?");
+        response.append("कुछ और पूछिए?");
         return response.toString();
     }
 
@@ -627,7 +665,7 @@ public class VoiceService {
 
     private String formatMedicationTimes(Medication medication, boolean dementiaStyle) {
         if (medication.getScheduledTimes() == null || medication.getScheduledTimes().isEmpty()) {
-            return dementiaStyle ? "aaj lena hai" : "should be taken today";
+            return dementiaStyle ? "आज लेना है" : "should be taken today";
         }
 
         String times = medication.getScheduledTimes().stream()
@@ -636,36 +674,70 @@ public class VoiceService {
                 .map(time -> time.format(DateTimeFormatter.ofPattern("h:mm a")))
                 .collect(Collectors.joining(", "));
 
-        return dementiaStyle ? "ko " + times + " par lena hai" : "at " + times;
+        return dementiaStyle ? "को " + times + " पर लेना है" : "at " + times;
     }
 
     private VoiceResponse generateFinalResponse(String transcription, String context,
             String userType, String mode,
             String userId, String sessionId,
-            ConfidenceScore confidence) {
+            ConfidenceScore confidence,
+            String language) {
         log.info("🎯 Intent: {}, Score: {}, High: {}",
                 confidence.getIntentType(), confidence.getScore(), confidence.isHighConfidence());
         try {
             if (confidence.isEmergency()) {
-                return handleEmergency(userId, transcription, sessionId);
+                hitlQueueService.addToQueue(userId, userType, transcription, context, confidence, sessionId);
+                return handleEmergency(userId, transcription, sessionId, language);
             } else if (confidence.isHighConfidence()) {
                 CompletableFuture<VoiceResponse> future = CompletableFuture.supplyAsync(
-                        () -> handleDirectLLM(transcription, context, userType, mode, userId, sessionId),
+                        () -> handleDirectLLM(transcription, context, userType, mode, userId, sessionId, language),
                         responseExecutor);
                 return future.get(30, TimeUnit.SECONDS);
             } else {
                 String reviewId = hitlQueueService.addToQueue(
                         userId, userType, transcription, context, confidence, sessionId);
-                return VoiceResponse.reviewRequired(sessionId, transcription, reviewId, 300);
+                
+                String systemPrompt = "You are a caring personal assistant. The user asked: \"" + transcription + "\". " +
+                      "You could not answer because: " + String.join(", ", confidence.getReasons()) + ". " +
+                      "Generate a short (1-2 sentences), empathetic response explicitly in the language the user prefers (Language code/name = " + language + "). " +
+                      "Gently explain why you can't answer right now and explicitly tell them that you are asking their caregiver for help, so they should wait.";
+                
+                String waitMessage = "मैं आपके केयरगिवर को इन्फॉर्म कर रही हूँ, कृपया प्रतीक्षा करें।";
+                if (language != null && (language.equalsIgnoreCase("en") || language.equalsIgnoreCase("English"))) {
+                    waitMessage = "I am informing your caregiver, please wait.";
+                } else if (language != null && (language.equalsIgnoreCase("mr") || language.equalsIgnoreCase("Marathi"))) {
+                    waitMessage = "मी तुमच्या केअरगिव्हरला माहिती देत आहे, कृपया प्रतीक्षा करा.";
+                }
+
+                try {
+                    String llmMsg = llmService.callLLM(systemPrompt, mode, language);
+                    if (llmMsg != null && !llmMsg.isBlank()) {
+                        waitMessage = llmMsg.trim();
+                    }
+                } catch (Exception e) {
+                    log.error("Failed to generate dynamic wait message. Using fallback.", e);
+                }
+                
+                String audioUrl = null;
+                try {
+                    audioUrl = ttsService.textToSpeech(waitMessage, userId);
+                } catch (Exception e) {
+                    log.error("Failed to generate TTS for wait message.", e);
+                }
+                
+                VoiceResponse resp = VoiceResponse.reviewRequired(sessionId, transcription, reviewId, 300);
+                resp.setTextResponse(waitMessage);
+                resp.setAudioUrl(audioUrl);
+                return resp;
             }
         } catch (Exception e) {
             log.error("Response generation failed: {}", e.getMessage());
             return createErrorResponse(sessionId, e.getMessage(),
-                    "Response lene mein problem hui. Kripya phir se koshish karein.");
+                    getLocalizedErrorMessage("RESPONSE_FAILED", language));
         }
     }
 
-    private String transcribeAudio(byte[] audioData) throws Exception {
+    private String transcribeAudio(byte[] audioData, String language) throws Exception {
         File tempFile = null;
         int maxRetries = 2;
         int retryCount = 0;
@@ -683,7 +755,7 @@ public class VoiceService {
                 }
 
                 String uploadUrl = uploadToAssemblyAI(tempFile);
-                String transcriptId = requestTranscription(uploadUrl);
+                String transcriptId = requestTranscription(uploadUrl, language);
                 return pollTranscriptionWithTimeout(transcriptId, 45);
 
             } catch (Exception e) {
@@ -783,8 +855,8 @@ public class VoiceService {
      * ✅ FIXED: AssemblyAI v2 API - removed problematic language_code, added proper
      * error handling
      */
-    private String requestTranscription(String audioUrl) throws IOException {
-        log.info("Requesting transcription for: {}...", audioUrl.substring(0, 50));
+    private String requestTranscription(String audioUrl, String language) throws IOException {
+        log.info("Requesting transcription for: {}... Language: {}", audioUrl.substring(0, Math.min(50, audioUrl.length())), language);
 
         JsonObject jsonBody = new JsonObject();
         jsonBody.addProperty("audio_url", audioUrl);
@@ -795,7 +867,12 @@ public class VoiceService {
         jsonBody.add("speech_models", speechModels);
 
         jsonBody.addProperty("punctuate", true);
-        jsonBody.addProperty("language_detection", true);
+
+        if (language != null && !language.isEmpty() && !language.equals("auto")) {
+            jsonBody.addProperty("language_code", language);
+        } else {
+            jsonBody.addProperty("language_detection", true);
+        }
 
         String jsonString = jsonBody.toString();
         log.debug("Request body: {}", jsonString);
@@ -826,22 +903,23 @@ public class VoiceService {
 
     private VoiceResponse handleDirectLLM(String transcription, String context,
             String userType, String mode,
-            String userId, String sessionId) {
+            String userId, String sessionId,
+            String language) {
         try {
-            String prompt = buildPrompt(transcription, context, userType);
-            String llmResponse = llmService.callLLM(prompt, mode);
+            String prompt = buildPrompt(transcription, context, userType, language);
+            String llmResponse = llmService.callLLM(prompt, mode, language);
             String audioUrl = ttsService.textToSpeech(llmResponse, userId);
             return VoiceResponse.success(sessionId, transcription, llmResponse, audioUrl);
         } catch (Exception e) {
             log.error("LLM/TTS failed: {}", e.getMessage());
             return createErrorResponse(sessionId, e.getMessage(),
-                    "Response generation failed. Kripya phir se koshish karein.");
+                    getLocalizedErrorMessage("RESPONSE_FAILED", language));
         }
     }
 
-    private VoiceResponse handleEmergency(String userId, String transcription, String sessionId) {
+    private VoiceResponse handleEmergency(String userId, String transcription, String sessionId, String language) {
         try {
-            String emergencyResponse = "Emergency alert triggered. Aapke caregivers ko notify kar diya gaya hai.";
+            String emergencyResponse = getLocalizedErrorMessage("EMERGENCY_ALERT", language);
             String audioUrl = ttsService.textToSpeech(emergencyResponse, userId);
             return VoiceResponse.builder()
                     .status(VoiceResponse.ResponseStatus.SUCCESS)
@@ -867,21 +945,52 @@ public class VoiceService {
                 .build();
     }
 
-    private String buildPrompt(String transcription, String context, String userType) {
+    private String getLocalizedErrorMessage(String errorType, String language) {
+        boolean isEnglish = "en".equalsIgnoreCase(language) || "English".equalsIgnoreCase(language);
+        boolean isMarathi = "mr".equalsIgnoreCase(language) || "Marathi".equalsIgnoreCase(language);
+        
+        switch (errorType) {
+            case "NO_AUDIO":
+                if (isEnglish) return "No audio received. Please speak again.";
+                if (isMarathi) return "कोणताही ऑडिओ मिळाला नाही. कृपया पुन्हा बोला.";
+                return "कोई ऑडियो नहीं मिला। कृपया फिर से बोलें।";
+            case "EMPTY_TRANSCRIPTION":
+                if (isEnglish) return "I couldn't understand. Please speak again.";
+                if (isMarathi) return "मला समजले नाही. कृपया पुन्हा बोला.";
+                return "कुछ समझ नहीं आया। कृपया फिर से बोलें।";
+            case "RESPONSE_FAILED":
+                if (isEnglish) return "Failed to get a response. Please try again.";
+                if (isMarathi) return "प्रतिसाद मिळविण्यात समस्या आली. कृपया पुन्हा प्रयत्न करा.";
+                return "रिस्पॉन्स मिलने में समस्या हुई। कृपया फिर से कोशिश करें।";
+            case "EMERGENCY_ALERT":
+                if (isEnglish) return "Emergency alert sent. Help is on the way.";
+                if (isMarathi) return "आणीबाणी अलर्ट पाठवला आहे. मदत येत आहे.";
+                return "इमरजेंसी अलर्ट भेज दिया गया है। मदद आ रही है।";
+            case "PROCESSING_FAILED":
+            default:
+                if (isEnglish) return "Processing failed. Please try again.";
+                if (isMarathi) return "प्रक्रिया अयशस्वी झाली. कृपया पुन्हा प्रयत्न करा.";
+                return "प्रोसेसिंग विफल रही। कृपया फिर से प्रयास करें।";
+        }
+    }
+
+    private String buildPrompt(String transcription, String context, String userType, String language) {
         StringBuilder prompt = new StringBuilder();
 
         if ("DEMENTIA_PATIENT".equals(userType)) {
             prompt.append("You are a caring personal assistant for a dementia patient. ")
-                    .append("Use very simple Hindi or English. ")
                     .append("Short sentences (5-8 words). ")
-                    .append("Be patient, gentle, and reassuring. ")
-                    .append("Reply in the same language as the patient's query. ")
-                    .append("If the patient speaks Hindi or Hinglish, answer in simple Hindi/Hinglish.\n\n");
+                    .append("Be patient, gentle, and reassuring. ");
         } else {
-            prompt.append("You are a helpful AI assistant. ")
-                    .append("Reply in the same language as the user's query. ")
-                    .append("If the query is in Hindi or Hinglish, answer in Hindi/Hinglish.\n\n");
+            prompt.append("You are a helpful AI assistant. ");
         }
+
+        prompt.append("CRITICAL LANGUAGE RULE: You MUST reply in the exact language the user prefers. The preferred language code is: ")
+              .append(language != null ? language : "auto")
+              .append(". ")
+              .append("If 'hi' or 'Hindi', you MUST reply in pure Hindi using the Devanagari Script (हिंदी). ")
+              .append("If 'mr' or 'Marathi', you MUST reply in pure Marathi using the Devanagari Script (मराठी). ")
+              .append("If 'en' or 'English', reply in English. Do NOT use romanized/Hinglish.\n\n");
 
         if (context != null && !context.isEmpty()) {
             prompt.append("Patient context:\n").append(context).append("\n\n");

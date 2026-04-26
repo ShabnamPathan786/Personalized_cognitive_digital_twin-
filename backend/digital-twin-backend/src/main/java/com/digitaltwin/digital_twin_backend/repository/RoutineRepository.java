@@ -10,6 +10,7 @@ import java.util.List;
 public interface RoutineRepository extends MongoRepository<Routine,String> {
     List<Routine> findByUserId(String userId);
     List<Routine> findByUserIdAndActiveTrue(String userId);
-    List<Routine>  findByUserIdAndCategory(String userId,Routine.ActivityCategory category);
+    List<Routine> findByActiveTrue();
+    List<Routine> findByUserIdAndCategory(String userId,Routine.ActivityCategory category);
 
 }

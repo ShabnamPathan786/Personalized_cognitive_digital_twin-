@@ -16,6 +16,10 @@ public interface HITLQueueRepository extends MongoRepository<HITLQueueItem, Stri
     @Query("{ 'status' : 'PENDING' }")
     List<HITLQueueItem> findByStatusOrderByPriorityAscCreatedAtAsc(HITLQueueItem.QueueStatus status);
 
+    // Find pending items for specific patients sorted by priority
+    @Query("{ 'status' : 'PENDING', 'userId': { $in: ?1 } }")
+    List<HITLQueueItem> findByStatusAndUserIdInOrderByPriorityAscCreatedAtAsc(HITLQueueItem.QueueStatus status, List<String> userIds);
+
     // Find by reviewer
     List<HITLQueueItem> findByReviewerId(String reviewerId);
 

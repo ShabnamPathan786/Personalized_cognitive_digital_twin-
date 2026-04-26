@@ -127,6 +127,51 @@ public class NotificationService {
         sendEmail(caregiverEmail, subject, body);
     }
 
+    /**
+     * Send routine reminder email
+     */
+    public void sendRoutineReminderEmail(String toEmail, String patientName,
+                                             String activityName, String scheduledTime) {
+        if (toEmail == null || toEmail.isBlank()) return;
+
+        String subject = "📅 Routine Reminder — " + activityName;
+        String body = String.format("""
+                <h2>Routine Reminder</h2>
+                <p>Hello %s,</p>
+                <p>It's time for your routine activity:</p>
+                <ul>
+                    <li><strong>Activity:</strong> %s</li>
+                    <li><strong>Time:</strong> %s</li>
+                </ul>
+                <p>Please complete it and mark it as done in the app.</p>
+                """, patientName, activityName, scheduledTime);
+
+        sendEmail(toEmail, subject, body);
+    }
+
+    /**
+     * Send missed routine alert email to caregiver
+     */
+    public void sendMissedRoutineEmail(String caregiverEmail, String caregiverName,
+                                           String patientName, String activityName,
+                                           String scheduledTime) {
+        if (caregiverEmail == null || caregiverEmail.isBlank()) return;
+
+        String subject = "🚨 Missed Routine Alert — " + patientName;
+        String body = String.format("""
+                <h2>⚠️ Missed Routine Alert</h2>
+                <p>Dear %s,</p>
+                <p>Your patient <strong>%s</strong> has missed an important routine activity:</p>
+                <ul>
+                    <li><strong>Activity:</strong> %s</li>
+                    <li><strong>Scheduled Time:</strong> %s</li>
+                </ul>
+                <p>Please follow up immediately.</p>
+                """, caregiverName, patientName, activityName, scheduledTime);
+
+        sendEmail(caregiverEmail, subject, body);
+    }
+
     // ==================== SMS ====================
 
     private String formatPhoneNumber(String phoneNumber) {

@@ -237,10 +237,54 @@ public class SummarizationService {
         return new TranscriptionResult(transcription, summary);
     }
 
+    // ================= YOUTUBE TRANSCRIPTION =================
+
+    public String fetchYouTubeTranscript(String videoId) throws IOException {
+        String pythonScriptPath = "extract_youtube.py";
+        String pythonExec = "./yt_env/bin/python";
+        
+        ProcessBuilder pb = new ProcessBuilder(pythonExec, pythonScriptPath, videoId);
+        pb.redirectErrorStream(true);
+        Process process = pb.start();
+
+        try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(process.getInputStream()))) {
+            StringBuilder output = new StringBuilder();
+            String line;
+            boolean capture = false;
+            while ((line = reader.readLine()) != null) {
+                if (line.equals("SUCCESS_TRANSCRIPT_START")) {
+                    capture = true;
+                    continue;
+                }
+                if (line.equals("SUCCESS_TRANSCRIPT_END")) {
+                    break;
+                }
+                if (line.startsWith("ERROR:")) {
+                    throw new IOException("Failed to extract transcript (Rate limit or unavailable): " + line);
+                }
+                if (capture) {
+                    output.append(line).append(" ");
+                }
+            }
+            try {
+                process.waitFor(20, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException("Process interrupted");
+            }
+            
+            String extracted = output.toString().trim();
+            if (extracted.isEmpty()) {
+                throw new IOException("Transcript could not be extracted. 429 Rate Limit or captions disabled.");
+            }
+            return extracted;
+        }
+    }
+
     // ================= NORMAL SUMMARY =================
 
     public String summarizeText(String text) throws IOException {
-        String truncatedText = text.length() > 8000 ? text.substring(0, 8000) : text;
+        String truncatedText = text.length() > 300000 ? text.substring(0, 300000) : text;
 
         JsonObject requestBody = new JsonObject();
         requestBody.addProperty("model", "openai/gpt-4o-mini");
@@ -259,11 +303,60 @@ public class SummarizationService {
 
         return sendRequest(requestBody);
     }
+    
+    // ================= YOUTUBE SUMMARY PROMPTS =================
+
+    public String summarizeYouTubeText(String text) throws IOException {
+        String truncatedText = text.length() > 300000 ? text.substring(0, 300000) : text;
+
+        JsonObject requestBody = new JsonObject();
+        requestBody.addProperty("model", "openai/gpt-4o-mini");
+        requestBody.addProperty("temperature", 0.5);
+        requestBody.addProperty("max_tokens", 500);
+
+        JsonObject message = new JsonObject();
+        message.addProperty("role", "user");
+        message.addProperty("content",
+                "Analyze the following video transcript and structure your response exactly like this:\n\n" +
+                "1. Summary: A single, concise sentence explaining what this video is about.\n" +
+                "2. Lessons: A clear summary of what this video teaches us, its core takeaways, or its main points.\n\n" +
+                "Transcript:\n" + truncatedText);
+
+        JsonArray messagesArray = new JsonArray();
+        messagesArray.add(message);
+        requestBody.add("messages", messagesArray);
+
+        return sendRequest(requestBody);
+    }
+
+    public String summarizeYouTubeForDementiaPatient(String text) throws IOException {
+        String truncatedText = text.length() > 300000 ? text.substring(0, 300000) : text;
+
+        JsonObject requestBody = new JsonObject();
+        requestBody.addProperty("model", "openai/gpt-4o-mini");
+        requestBody.addProperty("temperature", 0.3);
+        requestBody.addProperty("max_tokens", 500);
+
+        JsonObject message = new JsonObject();
+        message.addProperty("role", "user");
+        message.addProperty("content",
+                "Analyze the following video transcript for a dementia patient. Structure your response exactly like this:\n\n" +
+                "1. What it is: One simple sentence explaining what the video is about.\n" +
+                "2. What we learn: A few very short, clear sentences explaining the lesson or main point.\n\n" +
+                "Rules: Use very simple English. Use short sentences (5-10 words each). Do not use technical words.\n\n" +
+                "Transcript:\n" + truncatedText);
+
+        JsonArray messagesArray = new JsonArray();
+        messagesArray.add(message);
+        requestBody.add("messages", messagesArray);
+
+        return sendRequest(requestBody);
+    }
 
     // ================= DEMENTIA SUMMARY =================
 
     public String summarizeForDementiaPatient(String text) throws IOException {
-        String truncatedText = text.length() > 8000 ? text.substring(0, 8000) : text;
+        String truncatedText = text.length() > 300000 ? text.substring(0, 300000) : text;
 
         JsonObject requestBody = new JsonObject();
         requestBody.addProperty("model", "openai/gpt-4o-mini");

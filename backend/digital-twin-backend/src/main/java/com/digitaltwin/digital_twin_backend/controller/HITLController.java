@@ -34,9 +34,10 @@ public class HITLController {
      * Get pending queue for reviewers
      */
     @GetMapping("/queue/pending")
-    public ResponseEntity<ApiResponse<List<HITLQueueItem>>> getPendingQueue() {
+    public ResponseEntity<ApiResponse<List<HITLQueueItem>>> getPendingQueue(Authentication authentication) {
         try {
-            List<HITLQueueItem> queue = queueService.getPendingQueue();
+            CustomUserDetails user = (CustomUserDetails) authentication.getPrincipal();
+            List<HITLQueueItem> queue = queueService.getPendingQueue(user.getId());
             return ResponseEntity.ok(ApiResponse.success("Queue fetched", queue));
         } catch (Exception e) {
             log.error("Failed to fetch queue: {}", e.getMessage());

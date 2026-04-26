@@ -32,6 +32,7 @@ public class HITLQueueService {
     private final VoiceSessionRegistry voiceSessionRegistry;
     private final TTSService ttsService;
     private final NoteService noteService;
+    private final NotificationService notificationService;
 
     @Value("${app.hitl.review-timeout:300}")
     private int reviewTimeoutSeconds;
@@ -138,12 +139,55 @@ public class HITLQueueService {
                 "confidenceScore", item.getConfidenceScore(),
                 "reasons", item.getConfidenceReasons()));
 
-        log.info("Notified reviewers about new HITL item: {}", item.getId());
+        log.info("Notified reviewers via WebSocket about new HITL item: {}", item.getId());
+
+        // Notify patient's specific caregivers via SMS & Email
+        if (item.getUserId() != null) {
+            userRepository.findById(item.getUserId()).ifPresent(patient -> {
+                if (patient.getCaregiverIds() != null && !patient.getCaregiverIds().isEmpty()) {
+                    for (String caregiverId : patient.getCaregiverIds()) {
+                        userRepository.findById(caregiverId).ifPresent(caregiver -> {
+                            String messageText = String.format("🚨 HITL Alert: Your patient %s asked a question the AI couldn't answer: '%s'. Please log in to assist.",
+                                    patient.getFullName(), item.getQuery());
+                            
+                            if (caregiver.getPhoneNumber() != null && !caregiver.getPhoneNumber().isBlank()) {
+                                notificationService.sendSMS(caregiver.getPhoneNumber(), messageText);
+                            }
+                            
+                            if (caregiver.getEmail() != null && !caregiver.getEmail().isBlank()) {
+                                String emailBody = String.format("""
+                                        <h2>🚨 Patient Assistance Required</h2>
+                                        <p>Dear %s,</p>
+                                        <p>Your patient <strong>%s</strong> asked a question that the AI could not confidently answer:</p>
+                                        <blockquote style="border-left: 4px solid #ccc; padding-left: 10px;">%s</blockquote>
+                                        <p>Please log in to the caregiver dashboard to provide an answer.</p>
+                                        """, caregiver.getFullName(), patient.getFullName(), item.getQuery());
+                                notificationService.sendEmail(caregiver.getEmail(), "Patient Assistance Required - " + patient.getFullName(), emailBody);
+                            }
+                        });
+                    }
+                }
+            });
+        }
     }
 
-    public List<HITLQueueItem> getPendingQueue() {
-        return queueRepository.findByStatusOrderByPriorityAscCreatedAtAsc(
-                HITLQueueItem.QueueStatus.PENDING);
+    public List<HITLQueueItem> getPendingQueue(String reviewerId) {
+        log.info("Fetching pending HITL queue for caregiver: {}", reviewerId);
+
+        // 1. Find all patients linked to this caregiver
+        List<User> patients = userRepository.findByCaregiverIdsContaining(reviewerId);
+        List<String> patientIds = patients.stream()
+                .map(User::getId)
+                .toList();
+
+        // 2. Short-circuit if caregiver has no patients
+        if (patientIds.isEmpty()) {
+            return java.util.Collections.emptyList();
+        }
+
+        // 3. Return only queue items originating from these linked patients
+        return queueRepository.findByStatusAndUserIdInOrderByPriorityAscCreatedAtAsc(
+                HITLQueueItem.QueueStatus.PENDING, patientIds);
     }
 
     public HITLQueueItem assignToReviewer(String itemId, String reviewerId) {

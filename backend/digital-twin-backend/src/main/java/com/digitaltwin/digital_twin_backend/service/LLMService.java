@@ -31,10 +31,17 @@ public class LLMService {
             .build();
 
     /**
-     * Call LLM with prompt and get response
+     * Legacy call without language
      */
     public String callLLM(String prompt, String mode) throws IOException {
-        log.info("Calling LLM with prompt length: {}", prompt.length());
+        return callLLM(prompt, mode, "auto");
+    }
+
+    /**
+     * Call LLM with prompt, mode, and explicit language
+     */
+    public String callLLM(String prompt, String mode, String language) throws IOException {
+        log.info("Calling LLM with prompt length: {}, language: {}", prompt.length(), language);
 
         JsonObject requestBody = new JsonObject();
         requestBody.addProperty("model", model);
@@ -47,17 +54,27 @@ public class LLMService {
         JsonObject systemMessage = new JsonObject();
         systemMessage.addProperty("role", "system");
 
+        String languageInstruction = "";
+        if (language != null && !language.isEmpty() && !language.equalsIgnoreCase("auto")) {
+            languageInstruction = " CRITICAL INSTRUCTION: You MUST respond ONLY in " + language + 
+                                  ". If Hindi or Marathi, strictly use the Devanagari script. DO NOT output Romanized text. DO NOT mix languages.";
+        } else {
+            languageInstruction = " Respond in the same language and script as the user.";
+        }
+
         if ("dementia".equals(mode)) {
             systemMessage.addProperty("content",
                     "You are a gentle, patient voice assistant for dementia patients. " +
-                            "Use very simple Hindi/English words. Short sentences (5-8 words). " +
+                            "Use very simple language. Short sentences (5-8 words). " +
                             "Be kind and reassuring. Never use complex medical terms. " +
-                            "If unsure, politely say you'll check with their caregiver."
+                            "You CAN answer general knowledge questions (like the Prime Minister, math, facts) directly and truthfully. " +
+                            "However, if they ask about their personal schedule, memories, or medicine and it is NOT in the context, politely say you will check with their caregiver." +
+                            languageInstruction
             );
         } else {
             systemMessage.addProperty("content",
                     "You are a helpful voice assistant. Provide clear, accurate information. " +
-                            "Be concise but friendly. Use natural conversation style."
+                            "Be concise but friendly. Use natural conversation style." + languageInstruction
             );
         }
         messages.add(systemMessage);

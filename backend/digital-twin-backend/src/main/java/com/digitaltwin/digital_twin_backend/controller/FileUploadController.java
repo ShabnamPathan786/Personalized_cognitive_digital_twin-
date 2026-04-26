@@ -352,6 +352,95 @@ public class FileUploadController {
         return summarizeAudio(fileId, mode, saveAsNote, saveTranscription);
     }
 
+    // ==================== YOUTUBE SUMMARIZATION ====================
+
+    @PostMapping("/summarize/youtube")
+    public ResponseEntity<?> summarizeYouTube(@RequestBody Map<String, String> request) {
+        try {
+            String userId = getCurrentUserId();
+            String url = request.get("url");
+            String mode = request.getOrDefault("mode", "standard");
+            boolean saveAsNote = Boolean.parseBoolean(String.valueOf(request.getOrDefault("saveAsNote", "true")));
+            boolean saveTranscription = Boolean.parseBoolean(String.valueOf(request.getOrDefault("saveTranscription", "true")));
+
+            if (url == null || url.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "success", false,
+                        "message", "YouTube URL is required"
+                ));
+            }
+
+            // Extract video ID from URL
+            String videoId = extractYouTubeVideoId(url);
+            if (videoId == null) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "success", false,
+                        "message", "Invalid YouTube URL"
+                ));
+            }
+
+            // 1. Fetch transcript
+            String extractedText = summarizationService.fetchYouTubeTranscript(videoId);
+
+            // 2. Generate summary using Specialized YouTube Prompts
+            String summary = mode.equalsIgnoreCase("dementia")
+                    ? summarizationService.summarizeYouTubeForDementiaPatient(extractedText)
+                    : summarizationService.summarizeYouTubeText(extractedText);
+
+            // 3. Save summary as note if requested
+            if (saveAsNote) {
+                noteService.createSummaryNote(
+                        userId,
+                        "YouTube Summary: " + videoId,
+                        summary,
+                        videoId,
+                        url
+                );
+            }
+            
+            // 4. Save transcription as note if requested
+            if (saveTranscription) {
+                Note transcriptionNote = new Note();
+                transcriptionNote.setUserId(userId);
+                transcriptionNote.setTitle("Transcription: YouTube " + videoId);
+                transcriptionNote.setContent(extractedText);
+                transcriptionNote.setType(Note.NoteType.TEXT);
+                transcriptionNote.setPriority(Note.NotePriority.MEDIUM);
+                transcriptionNote.setSourceFileId(videoId);
+                transcriptionNote.setSourceFileName(url);
+                transcriptionNote.setColor("#DBEAFE");
+                transcriptionNote.setCategory("Transcription");
+                transcriptionNote.setPinned(false);
+                transcriptionNote.setArchived(false);
+                noteService.createNote(transcriptionNote);
+            }
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "YouTube video transcribed and summarized successfully",
+                    "data", Map.of(
+                            "transcription", extractedText,
+                            "summary", summary
+                    )
+            ));
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", "Failed to process YouTube video: " + e.getMessage()
+            ));
+        }
+    }
+
+    private String extractYouTubeVideoId(String url) {
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("(?:v=|youtu\\.be/|v/|embed/)([0-9A-Za-z_-]{11})");
+        java.util.regex.Matcher matcher = pattern.matcher(url);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+        return null;
+    }
+
     // ==================== TEXT SUMMARIZATION ====================
 
     @PostMapping("/summarize/text")

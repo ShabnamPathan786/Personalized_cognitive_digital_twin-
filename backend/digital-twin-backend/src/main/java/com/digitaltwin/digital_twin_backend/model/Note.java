@@ -7,6 +7,7 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 @Data
@@ -39,6 +40,8 @@ public class Note {
     private LocalDateTime updatedAt;
     private LocalDateTime reminderAt;
 
+    private List<String> daysOfWeek; // ADD THIS for ROUTINE types
+
     private Map<String, String> metadata;  // For additional data like HITL queue ID
 
     public enum NoteType {
@@ -46,7 +49,6 @@ public class Note {
         PERSONAL,
         MEDICAL,
         REMINDER,
-        VOICE_NOTE,
         DOCUMENT,
         EMERGENCY,
         TEXT,
