@@ -15,14 +15,7 @@ export const useVoiceWebSocket = () => {
     const [connected, setConnected] = useState(false);
     const [transcription, setTranscription] = useState("");
     const [response, setResponse] = useState(null);
-    const [latestResponse, setLatestResponse] = useState(() => {
-        try {
-            const saved = sessionStorage.getItem("voiceHelper.latestResponse");
-            return saved ? JSON.parse(saved) : null;
-        } catch {
-            return null;
-        }
-    });
+    const [latestResponse, setLatestResponse] = useState(null);
     const [waitingForReview, setWaitingForReview] = useState(false);
     const [reviewId, setReviewId] = useState(null);
     const [error, setError] = useState(null);
@@ -41,6 +34,7 @@ export const useVoiceWebSocket = () => {
     const reconnectTimeout = useRef(null);
     const pendingChunks = useRef([]);
     const modeRef = useRef("standard");
+    const languageRef = useRef("auto");
     const subscriptionsRef = useRef([]);
     const lastHandledMessageRef = useRef(null);
     const isUnmountedRef = useRef(false);
@@ -658,6 +652,7 @@ export const useVoiceWebSocket = () => {
                             headers: { sessionId: sessionId.current },
                             body: JSON.stringify({
                                 mode: modeRef.current,
+                                language: languageRef.current,
                                 ...buildVoiceUserContext(),
                             }),
                         });
@@ -680,7 +675,30 @@ export const useVoiceWebSocket = () => {
         if (recorder.stream) {
             recorder.stream.getTracks().forEach((track) => track.stop());
         }
-    }, []);
+    }, [isRecording]);
+
+    const sendTextQuery = useCallback((text) => {
+        if (!text || !text.trim()) return;
+        if (!stompClient.current || !stompClient.current.connected) {
+            safeSetError("Service is not connected yet. Please wait a moment and try again.");
+            return;
+        }
+
+        setIsProcessing(true);
+        setTranscription(text);
+        
+        stompClient.current.publish({
+            destination: "/app/voice.text",
+            headers: { sessionId: sessionId.current },
+            body: JSON.stringify({
+                text: text.trim(),
+                mode: modeRef.current,
+                language: languageRef.current,
+                ...buildVoiceUserContext()
+            })
+        });
+        console.log("📤 Text query sent:", text);
+    }, [connected]);
 
     const cancelRecording = useCallback(() => {
         if (stopInProgress.current) {
@@ -725,6 +743,11 @@ export const useVoiceWebSocket = () => {
     const setMode = useCallback((mode) => {
         modeRef.current = mode;
         console.log("Voice mode set to:", mode);
+    }, []);
+
+    const setLanguage = useCallback((lang) => {
+        languageRef.current = lang;
+        console.log("Voice language set to:", lang);
     }, []);
 
     const manualReconnect = useCallback(() => {
@@ -777,8 +800,10 @@ export const useVoiceWebSocket = () => {
         cancelRecording,
         disconnect,
         setMode,
+        setLanguage,
         manualReconnect,
         clearError,
         restartConversation,
+        sendTextQuery,
     };
 };

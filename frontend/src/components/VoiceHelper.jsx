@@ -110,6 +110,23 @@ const VA_STYLES = `
   }
   .va-icon-btn:hover { background: rgba(44,44,42,0.07); color: var(--color-charcoal, #2C2C2A); }
 
+  .va-lang-select {
+    padding: 6px 28px 6px 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(44,44,42,0.12);
+    font-size: 13px; font-weight: 500;
+    color: var(--color-charcoal, #2C2C2A);
+    background: var(--color-white, #FAFAF8);
+    cursor: pointer;
+    outline: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%232C2C2A%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px top 50%;
+    background-size: 8px auto;
+  }
+  .va-lang-select:focus { border-color: var(--color-sage-dark, #6A9E98); }
+
   /* ── MESSAGES AREA ──────────────────────────────────────────────────────── */
   .va-messages {
     flex: 1;
@@ -425,7 +442,23 @@ const VA_STYLES = `
   }
   .va-tray-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
-  /* mic button */
+  /* text input */
+  .va-tray-input {
+    flex: 1;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 15px;
+    font-family: inherit;
+    color: var(--color-charcoal, #2C2C2A);
+    padding: 8px 4px;
+    min-width: 0;
+  }
+  .va-tray-input::placeholder {
+    color: var(--color-charcoal-muted, #888780);
+  }
+
+  /* mic & send buttons */
   .va-mic-btn {
     background: var(--color-charcoal, #2C2C2A);
     color: var(--color-white, #FAFAF8);
@@ -440,6 +473,16 @@ const VA_STYLES = `
     background: var(--color-ember, #EA2E00);
     box-shadow: 0 2px 12px rgba(234,46,0,0.35);
     animation: vaMicPulse 1.5s ease-in-out infinite;
+  }
+  .va-send-btn {
+    background: var(--color-sage-dark, #6A9E98);
+    color: var(--color-white, #FAFAF8);
+    box-shadow: 0 2px 8px rgba(106,158,152,0.3);
+  }
+  .va-send-btn:hover {
+    background: #5a8e88;
+    box-shadow: 0 4px 12px rgba(106,158,152,0.4);
+    transform: scale(1.03);
   }
   @keyframes vaMicPulse {
     0%,100% { box-shadow: 0 2px 12px rgba(234,46,0,0.35); }
@@ -477,6 +520,13 @@ const Mic = ({ size = 18 }) => (
         <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
         <line x1="12" y1="19" x2="12" y2="23"/>
         <line x1="8"  y1="23" x2="16" y2="23"/>
+    </svg>
+);
+const Send = ({ size = 18 }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="22" y1="2" x2="11" y2="13"/>
+        <polygon points="22 2 15 22 11 13 2 9 22 2"/>
     </svg>
 );
 const Stop = ({ size = 18 }) => (
@@ -517,12 +567,14 @@ const VoiceHelper = () => {
         connected, transcription, ready, response, latestResponse,
         waitingForReview, reviewId, error, isRecording, isProcessing,
         sessionId, startRecording, stopRecording, manualReconnect,
-        clearError, restartConversation, setMode
+        clearError, restartConversation, setMode, setLanguage, sendTextQuery
     } = useVoiceWebSocket();
 
     const [mode, setLocalMode] = useState(
         user?.userType === 'DEMENTIA_PATIENT' ? 'dementia' : 'standard'
     );
+    const [localLang, setLocalLang] = useState('auto');
+    const [textInput, setTextInput] = useState('');
     const [estimatedWait, setEstimatedWait]   = useState(0);
     const [messages, setMessages]             = useState([]);  // {id, role, text, audioUrl, reviewedBy}
     const messagesEndRef                      = useRef(null);
@@ -530,6 +582,7 @@ const VoiceHelper = () => {
     const prevResponse                        = useRef('');
 
     useEffect(() => { setMode(mode); }, [mode, setMode]);
+    useEffect(() => { setLanguage(localLang); }, [localLang, setLanguage]);
 
     /* countdown timer for review wait */
     useEffect(() => {
@@ -611,7 +664,7 @@ const VoiceHelper = () => {
                         <div className="va-nav-icon">
                             <Mic size={16} />
                         </div>
-                        <span className="va-nav-title">Voice Assistant</span>
+                        <span className="va-nav-title">Assistant</span>
                     </div>
 
                     <div className="va-nav-right">
@@ -629,17 +682,22 @@ const VoiceHelper = () => {
                             </div>
                         )}
 
+                        <select 
+                            className="va-lang-select" 
+                            value={localLang} 
+                            onChange={(e) => setLocalLang(e.target.value)}
+                            title="Select Spoken Language"
+                        >
+                            <option value="auto">Auto-detect</option>
+                            <option value="en">English</option>
+                            <option value="hi">हिंदी (Hindi)</option>
+                            <option value="mr">मराठी (Marathi)</option>
+                        </select>
+
                         <div className="va-status-dot-wrap">
                             <span className={`va-dot ${connected ? 'online' : 'offline'}`} />
                             {connected ? 'Connected' : 'Offline'}
                         </div>
-
-                        <button className="va-icon-btn" onClick={manualReconnect} title="Reconnect">
-                            <Refresh size={15} />
-                        </button>
-                        <button className="va-icon-btn" title="More options">
-                            <DotsHoriz size={15} />
-                        </button>
                     </div>
                 </nav>
 
@@ -709,7 +767,7 @@ const VoiceHelper = () => {
                                     <div className="va-bubble">{msg.text}</div>
                                     {msg.role === 'assistant' && (
                                         <div className="va-bubble-meta">
-                                            Voice Assistant
+                                            Assistant
                                             {msg.reviewedBy && (
                                                 <span className="va-reviewed-badge">✓ Human reviewed</span>
                                             )}
@@ -778,30 +836,55 @@ const VoiceHelper = () => {
                                     <div className="va-spin" />
                                     Processing…
                                 </div>
-                            ) : (
+                            ) : (!hasMic || !ready || waitingForReview) ? (
                                 <span className="va-tray-label">
                                     {!hasMic
                                         ? 'Microphone unavailable'
                                         : !ready
                                             ? 'Connecting…'
-                                            : waitingForReview
-                                                ? 'Waiting for reviewer…'
-                                                : 'Tap the mic to speak'
+                                            : 'Waiting for reviewer…'
                                     }
                                 </span>
+                            ) : (
+                                <input
+                                    type="text"
+                                    className="va-tray-input"
+                                    placeholder="Type a message..."
+                                    value={textInput}
+                                    onChange={(e) => setTextInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && textInput.trim()) {
+                                            sendTextQuery(textInput);
+                                            setTextInput('');
+                                        }
+                                    }}
+                                />
                             )}
 
                             {/* Right actions */}
                             <div className="va-tray-actions">
-                                {/* Mic / stop button */}
-                                <button
-                                    className={`va-tray-btn va-mic-btn ${isRecording ? 'recording' : ''}`}
-                                    onClick={isRecording ? stopRecording : startRecording}
-                                    disabled={!isRecording && !canStart}
-                                    aria-label={isRecording ? 'Stop recording' : 'Start recording'}
-                                >
-                                    {isRecording ? <Stop size={16} /> : <Mic size={17} />}
-                                </button>
+                                {/* Mic / stop / send button */}
+                                {(textInput.trim() && !isRecording && !isProcessing && ready && !waitingForReview) ? (
+                                    <button
+                                        className="va-tray-btn va-send-btn"
+                                        onClick={() => {
+                                            sendTextQuery(textInput);
+                                            setTextInput('');
+                                        }}
+                                        aria-label="Send message"
+                                    >
+                                        <Send size={16} />
+                                    </button>
+                                ) : (
+                                    <button
+                                        className={`va-tray-btn va-mic-btn ${isRecording ? 'recording' : ''}`}
+                                        onClick={isRecording ? stopRecording : startRecording}
+                                        disabled={!isRecording && !canStart}
+                                        aria-label={isRecording ? 'Stop recording' : 'Start recording'}
+                                    >
+                                        {isRecording ? <Stop size={16} /> : <Mic size={17} />}
+                                    </button>
+                                )}
                             </div>
                         </div>
 

@@ -409,17 +409,28 @@ const HITLReviewDashboard = () => {
                                     </div>
                                 )}
 
-                                {/* Response Input */}
+                                {/* Profile Access Button */}
+                                <div className="mb-4">
+                                    <button
+                                        onClick={() => alert(`Direct patient dashboard access (ID: ${currentItem.userId}) will open here.`)}
+                                        className="w-full bg-blue-50 hover:bg-blue-100 text-blue-700 px-4 py-2 rounded-lg text-sm font-medium transition"
+                                    >
+                                        👤 Access Full Patient Profile
+                                    </button>
+                                </div>
+
+                                {/* Response Input as Chat */}
                                 <div className="mb-4">
                                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Your Response:
+                                        💬 Chat Response to Patient:
                                     </label>
+                                    <p className="text-xs text-gray-500 mb-2">Your text will be spoken directly to the patient via their voice assistant.</p>
                                     <textarea
                                         value={reviewResponse}
                                         onChange={(e) => setReviewResponse(e.target.value)}
                                         rows="4"
                                         className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                                        placeholder="Type your response here..."
+                                        placeholder="Type your response to the patient here..."
                                     />
                                 </div>
 

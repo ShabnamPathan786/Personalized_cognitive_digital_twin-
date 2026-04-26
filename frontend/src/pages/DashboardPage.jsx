@@ -95,7 +95,6 @@ export default function Home() {
   const [loadingPatients, setLoadingPatients] = useState(false);
   const [loadingCaregivers, setLoadingCaregivers] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [showCaregivers, setShowCaregivers] = useState(false);
   const [error, setError] = useState('');
   const [copyToast, setCopyToast] = useState('');
   const toastTimer = useRef(null);
@@ -113,7 +112,10 @@ export default function Home() {
     catch { showCopyToast('Copy failed — please copy manually'); }
   };
 
-  useEffect(() => { if (user?.userType === 'CAREGIVER') fetchPatients(); }, [user]);
+  useEffect(() => {
+    if (user?.userType === 'CAREGIVER') fetchPatients();
+    if (user?.userType === 'DEMENTIA_PATIENT') fetchCaregivers();
+  }, [user]);
 
   const fetchPatients = async () => {
     setLoadingPatients(true);
@@ -126,14 +128,9 @@ export default function Home() {
     setLoadingCaregivers(true);
     try {
       const r = await axios.get('/connections/my-caregivers');
-      if (r.data.success) { setCaregivers(Array.isArray(r.data.data) ? r.data.data : [r.data.data]); setShowCaregivers(true); }
+      if (r.data.success) { setCaregivers(Array.isArray(r.data.data) ? r.data.data : [r.data.data]); }
     } catch { setError('Failed to load caregivers.'); }
     finally { setLoadingCaregivers(false); }
-  };
-
-  const handleViewCaregivers = () => {
-    if (!showCaregivers && caregivers.length === 0) fetchCaregivers();
-    else setShowCaregivers(v => !v);
   };
 
   const handleLogout = async () => {
@@ -259,52 +256,36 @@ export default function Home() {
               </div>
             )}
 
-            {showCaregivers && (
-              <div style={{ background: 'var(--color-white)', borderRadius: 'var(--radius-xl)', padding: 'var(--space-6)', marginBottom: 'var(--space-8)', border: '1.5px solid var(--color-sage-light)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-5)' }}>
-                  <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 600, color: 'var(--color-charcoal)' }}>My Caregivers</h3>
-                  <button onClick={() => setShowCaregivers(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, color: 'var(--color-charcoal-mid)' }}>×</button>
-                </div>
-                {loadingCaregivers
-                  ? <div style={{ textAlign: 'center', padding: 'var(--space-8)' }}><div style={{ width: 36, height: 36, border: '3px solid var(--color-sage)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto' }} /></div>
-                  : caregivers.length > 0
-                    ? <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 'var(--space-4)' }}>
-                      {caregivers.map((c, i) => (
-                        <div key={c.id || i} style={{ background: 'var(--color-cream)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-4)' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
-                            <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--color-sage)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700 }}>{c.fullName?.[0] || 'C'}</div>
-                            <div>
-                              <div style={{ fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--color-charcoal)' }}>{c.fullName || 'Caregiver'}</div>
-                              <div style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-xs)', color: 'var(--color-charcoal-mid)' }}>{c.email}</div>
-                            </div>
+            {/* My Caregivers */}
+            <div style={{ background: 'var(--color-white)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-4)', border: '1.5px solid var(--color-sage-light)', marginBottom: 'var(--space-8)' }}>
+              <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 600, color: 'var(--color-charcoal)', marginBottom: 'var(--space-4)' }}>My Caregivers</h3>
+              {loadingCaregivers
+                ? <div style={{ textAlign: 'center', padding: 'var(--space-4)' }}><div style={{ width: 28, height: 28, border: '3px solid var(--color-sage)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto' }} /></div>
+                : caregivers.length > 0
+                  ? <div style={{ display: 'grid', gridTemplateColumns: caregivers.length === 1 ? '1fr' : 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'var(--space-3)' }}>
+                    {caregivers.map((c, i) => (
+                      <div key={c.id || i} style={{ background: 'var(--color-cream)', borderRadius: 'var(--radius-md)', padding: 'var(--space-3)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-2)' }}>
+                          <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--color-sage)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 14 }}>{c.fullName?.[0] || 'C'}</div>
+                          <div>
+                            <div style={{ fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--color-charcoal)' }}>{c.fullName || 'Caregiver'}</div>
+                            <div style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-xs)', color: 'var(--color-charcoal-mid)' }}>{c.email}</div>
                           </div>
-                          <div style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-xs)', color: 'var(--color-charcoal-mid)' }}>📱 {c.phoneNumber || 'N/A'}</div>
                         </div>
-                      ))}
-                    </div>
-                    : <div style={{ textAlign: 'center', padding: 'var(--space-8)', color: 'var(--color-charcoal-mid)', fontFamily: 'var(--font-body)' }}>No caregivers linked yet.</div>
-                }
-              </div>
-            )}
+                        <div style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-xs)', color: 'var(--color-charcoal-mid)' }}>
+                          👤 @{c.username || 'unknown'} {c.phoneNumber ? ` • 📱 ${c.phoneNumber}` : ''}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  : <div style={{ textAlign: 'center', padding: 'var(--space-4)', color: 'var(--color-charcoal-mid)', fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)' }}>No caregivers linked yet.</div>
+              }
+            </div>
+
             <PatientNotesPreview />
             <SectionHeading label="Your tools" title="What would you like to do?" />
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 'var(--space-4)', marginBottom: 'var(--space-8)' }}>
               {patientCards.map((c, i) => <ActionCard key={c.title} {...c} accentColor={c.color} index={i} />)}
-            </div>
-
-            {/* Caregivers toggle */}
-            <div onClick={handleViewCaregivers} style={{ background: 'var(--color-white)', borderRadius: 'var(--radius-xl)', padding: 'var(--space-5) var(--space-6)', border: '1.5px solid var(--color-sage-light)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', transition: 'box-shadow 0.2s' }}
-              onMouseEnter={e => e.currentTarget.style.boxShadow = 'var(--shadow-md)'}
-              onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
-                <div style={{ width: 48, height: 48, borderRadius: 'var(--radius-md)', background: 'var(--color-sage-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>👨‍⚕️</div>
-                <div>
-                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 17, fontWeight: 600, color: 'var(--color-charcoal)' }}>My Caregivers</div>
-                  <div style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)', color: 'var(--color-charcoal-mid)' }}>View the people taking care of you</div>
-                </div>
-              </div>
-              <span style={{ fontSize: 18, color: 'var(--color-charcoal-mid)' }}>{showCaregivers ? '▲' : '▼'}</span>
             </div>
           </>
         )}

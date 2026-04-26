@@ -167,6 +167,27 @@ export const fileApi = {
     },
 
     /**
+     * Summarize YouTube Video
+     * @param {string} url - YouTube URL
+     * @param {Object} options - Summarization options
+     * @param {string} options.mode - "standard" or "dementia" (default: "standard")
+     * @param {boolean} options.saveAsNote - Save summary as note (default: true)
+     * @param {boolean} options.saveTranscription - Save transcription as note (default: true)
+     * @returns {Promise} Response with transcription and summary
+     */
+    summarizeYouTube: async (url, options = {}) => {
+        const { mode = 'standard', saveAsNote = true, saveTranscription = true } = options;
+
+        const response = await axios.post('/files/summarize/youtube', {
+            url,
+            mode,
+            saveAsNote,
+            saveTranscription
+        });
+        return response.data;
+    },
+
+    /**
      * Get cached summary for a file
      * @param {string} fileId - File ID
      * @returns {Promise} Response with cached summary

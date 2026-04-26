@@ -13,11 +13,16 @@ const SummarizationPage = () => {
     const [textSummary, setTextSummary] = useState('');
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
-    const [activeTab, setActiveTab] = useState('pdf'); // 'pdf', 'audio', 'video', 'text'
+    const [activeTab, setActiveTab] = useState('pdf'); // 'pdf', 'audio', 'video', 'text', 'youtube'
     const [summaryMode, setSummaryMode] = useState(
         user?.userType === 'DEMENTIA_PATIENT' ? 'dementia' : 'standard'
     );
     const [expandedTranscription, setExpandedTranscription] = useState({});
+    
+    // YouTube Specific state
+    const [youtubeUrl, setYoutubeUrl] = useState('');
+    const [youtubeResult, setYoutubeResult] = useState(null);
+    const [videoInputType, setVideoInputType] = useState('system'); // 'system' or 'youtube'
 
     useEffect(() => {
         loadFiles();
@@ -103,6 +108,38 @@ const SummarizationPage = () => {
             }
         } catch (error) {
             setError('Failed to generate summary');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSummarizeYouTube = async (e) => {
+        e.preventDefault();
+        if (!youtubeUrl.trim()) {
+            setError('Please enter a YouTube URL');
+            return;
+        }
+
+        setLoading(true);
+        setError('');
+        setSuccess('');
+        setYoutubeResult(null);
+
+        try {
+            const response = await fileApi.summarizeYouTube(youtubeUrl, {
+                mode: summaryMode,
+                saveAsNote: true,
+                saveTranscription: false
+            });
+            
+            if (response.success) {
+                setYoutubeResult(response.data);
+                setSuccess('✅ YouTube summary generated successfully!');
+                setYoutubeUrl(''); // Clear input on success
+            }
+        } catch (error) {
+            console.error('YouTube summary error:', error);
+            setError(error.response?.data?.message || 'Failed to fetch and summarize YouTube video');
         } finally {
             setLoading(false);
         }
@@ -308,19 +345,79 @@ const SummarizationPage = () => {
                     {/* File Tabs Content */}
                     {(activeTab === 'pdf' || activeTab === 'audio' || activeTab === 'video') && (
                         <div className="p-6">
-                            <h2 className="text-xl font-bold text-gray-800 mb-4">
-                                Your {activeTab.toUpperCase()} Files
-                            </h2>
-                            {loading ? (
-                                <div className="text-center py-12">
-                                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
-                                    <p className="mt-4 text-gray-600">Loading files...</p>
+                            {activeTab === 'video' && (
+                                <div className="flex mb-6 bg-gray-100 p-1 rounded-lg w-full max-w-sm">
+                                    <button
+                                        onClick={() => setVideoInputType('system')}
+                                        className={`flex-1 py-2 text-sm font-medium rounded-md transition ${videoInputType === 'system' ? 'bg-white shadow text-purple-600' : 'text-gray-600 hover:text-gray-800'}`}
+                                    >
+                                        🖥️ Uploaded Files
+                                    </button>
+                                    <button
+                                        onClick={() => setVideoInputType('youtube')}
+                                        className={`flex-1 py-2 text-sm font-medium rounded-md transition ${videoInputType === 'youtube' ? 'bg-white shadow text-red-600' : 'text-gray-600 hover:text-gray-800'}`}
+                                    >
+                                        📺 YouTube Link
+                                    </button>
                                 </div>
-                            ) : files.length === 0 ? (
-                                renderEmptyState(activeTab.toUpperCase())
+                            )}
+
+                            {activeTab === 'video' && videoInputType === 'youtube' ? (
+                                <div className="animate-fadeIn">
+                                    <h2 className="text-xl font-bold text-gray-800 mb-4">Summarize YouTube Video</h2>
+                                    <form onSubmit={handleSummarizeYouTube} className="space-y-4">
+                                        <div>
+                                            <input
+                                                type="url"
+                                                value={youtubeUrl}
+                                                onChange={(e) => setYoutubeUrl(e.target.value)}
+                                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                                                placeholder="https://www.youtube.com/watch?v=..."
+                                                required
+                                            />
+                                        </div>
+
+                                        <button
+                                            type="submit"
+                                            disabled={loading || !youtubeUrl.trim()}
+                                            className="w-full bg-red-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition shadow-sm"
+                                        >
+                                            {loading ? 'Fetching & Summarizing...' : '📺 Summarize YouTube Video'}
+                                        </button>
+                                    </form>
+
+                                    {youtubeResult && (
+                                        <div className="mt-6 space-y-4">
+                                            <div className="bg-purple-50 border border-purple-200 rounded-lg p-6">
+                                                <h3 className="text-lg font-bold text-purple-900 mb-3">🔍 Summary:</h3>
+                                                <p className="text-gray-800 whitespace-pre-wrap">{youtubeResult.summary}</p>
+                                            </div>
+                                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+                                                <h3 className="text-lg font-bold text-blue-900 mb-3">📝 Full Transcription:</h3>
+                                                <div className="text-blue-800 whitespace-pre-wrap max-h-64 overflow-y-auto pr-2 pb-2">
+                                                    {youtubeResult.transcription}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {files.map(renderFileCard)}
+                                <div>
+                                    <h2 className="text-xl font-bold text-gray-800 mb-4">
+                                        Your {activeTab.toUpperCase()} Files
+                                    </h2>
+                                    {loading ? (
+                                        <div className="text-center py-12">
+                                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
+                                            <p className="mt-4 text-gray-600">Loading files...</p>
+                                        </div>
+                                    ) : files.length === 0 ? (
+                                        renderEmptyState(activeTab.toUpperCase())
+                                    ) : (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {files.map(renderFileCard)}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
