@@ -32,4 +32,7 @@ public interface NoteRepository extends MongoRepository<Note, String> {
 
     @Query("{ 'userId': ?0, $text: { $search: ?1 } }")
     List<Note> searchByText(String userId, String searchText);
+    
+    @Query("{ 'userId': ?0, 'type': ?1, 'createdAt': { $gte: ?2, $lt: ?3 } }")
+    List<Note> findByUserIdAndTypeAndDateRange(String userId, Note.NoteType type, LocalDateTime start, LocalDateTime end);
 }

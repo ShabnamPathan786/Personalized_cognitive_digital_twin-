@@ -12,6 +12,7 @@ export const authApi = {
     },
 
     // Login user
+    // In your authApi.js login function
     login: async (credentials) => {
         try {
             const response = await axios.post('/auth/login', credentials);

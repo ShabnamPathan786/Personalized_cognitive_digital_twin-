@@ -17,23 +17,74 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  // Check localStorage on mount (no API call)
+  const clearAuthState = () => {
+    localStorage.removeItem('user');
+    localStorage.removeItem('sessionId');
+    setUser(null);
+    setIsAuthenticated(false);
+  };
+
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      clearAuthState();
+      setLoading(false);
+    };
+
+    window.addEventListener('auth:unauthorized', handleUnauthorized);
+
+    return () => {
+      window.removeEventListener('auth:unauthorized', handleUnauthorized);
+    };
+  }, []);
+
+  useEffect(() => {
+    const restoreSession = async () => {
+      const storedUser = localStorage.getItem('user');
+      const sessionId = localStorage.getItem('sessionId');
+
+      if (!storedUser || storedUser === 'undefined' || !sessionId) {
+        clearAuthState();
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        const response = await authApi.getCurrentUser();
+
+        if (response.success) {
+          const currentUser = response.data || parsedUser;
+          localStorage.setItem('user', JSON.stringify(currentUser));
+          setUser(currentUser);
+          setIsAuthenticated(true);
+        } else {
+          clearAuthState();
+        }
+      } catch (error) {
+        console.error('Session restore failed:', error);
+        clearAuthState();
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    restoreSession();
+  }, []);
+
+  // Keep local state in sync if localStorage is malformed
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
     const sessionId = localStorage.getItem('sessionId');
     
-    if (storedUser && storedUser !== 'undefined' && sessionId) {
+    if (!loading && storedUser && storedUser !== 'undefined' && sessionId) {
       try {
         setUser(JSON.parse(storedUser));
-        setIsAuthenticated(true);
       } catch (error) {
         console.error('Error parsing stored user:', error);
-        localStorage.removeItem('user');
-        localStorage.removeItem('sessionId');
+        clearAuthState();
       }
     }
-    setLoading(false);
-  }, []);
+  }, [loading]);
 
   const login = async (credentials) => {
     try {
@@ -82,10 +133,7 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
-      localStorage.removeItem('user');
-      localStorage.removeItem('sessionId');
-      setUser(null);
-      setIsAuthenticated(false);
+      clearAuthState();
     }
   };
 

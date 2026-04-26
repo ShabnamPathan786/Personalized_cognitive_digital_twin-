@@ -27,11 +27,22 @@ public class WebSocketService {
             messagingTemplate.convertAndSendToUser(
                     username,
                     "/queue/voice.response",
-                    response
-            );
+                    response);
             log.debug("📤 Sent voice response to user: {}", username);
         } catch (Exception e) {
             log.error("❌ Failed to send voice response to {}: {}", username, e.getMessage());
+        }
+    }
+
+    /**
+     * Send to anonymous user via topic (no username available)
+     */
+    public void sendToTopic(String destination, Object payload) {
+        try {
+            messagingTemplate.convertAndSend(destination, payload);
+            log.debug("📤 Sent to topic: {}", destination);
+        } catch (Exception e) {
+            log.error("❌ Failed to send to topic {}: {}", destination, e.getMessage());
         }
     }
 
@@ -46,9 +57,7 @@ public class WebSocketService {
                     Map.of(
                             "text", transcription,
                             "isFinal", isFinal,
-                            "timestamp", System.currentTimeMillis()
-                    )
-            );
+                            "timestamp", System.currentTimeMillis()));
         } catch (Exception e) {
             log.error("❌ Failed to send transcription to {}: {}", username, e.getMessage());
         }
@@ -66,9 +75,7 @@ public class WebSocketService {
                             "reviewId", reviewId,
                             "status", status,
                             "message", message,
-                            "timestamp", System.currentTimeMillis()
-                    )
-            );
+                            "timestamp", System.currentTimeMillis()));
         } catch (Exception e) {
             log.error("❌ Failed to send HITL status to {}: {}", username, e.getMessage());
         }
@@ -85,9 +92,7 @@ public class WebSocketService {
                     Map.of(
                             "error", error,
                             "details", details,
-                            "timestamp", System.currentTimeMillis()
-                    )
-            );
+                            "timestamp", System.currentTimeMillis()));
         } catch (Exception e) {
             log.error("❌ Failed to send error to {}: {}", username, e.getMessage());
         }
@@ -100,8 +105,7 @@ public class WebSocketService {
         try {
             messagingTemplate.convertAndSend(
                     "/topic/hitl.new",
-                    hitlItem
-            );
+                    hitlItem);
             log.debug("📤 Notified reviewers about new HITL item: {}", hitlItem.get("id"));
         } catch (Exception e) {
             log.error("❌ Failed to notify reviewers: {}", e.getMessage());
@@ -116,8 +120,7 @@ public class WebSocketService {
             messagingTemplate.convertAndSendToUser(
                     reviewerId,
                     "/queue/hitl.queue",
-                    queueData
-            );
+                    queueData);
         } catch (Exception e) {
             log.error("❌ Failed to send queue update to reviewer {}: {}", reviewerId, e.getMessage());
         }
@@ -130,8 +133,7 @@ public class WebSocketService {
         try {
             messagingTemplate.convertAndSend(
                     "/topic/admin/status",
-                    status
-            );
+                    status);
         } catch (Exception e) {
             log.error("❌ Failed to broadcast system status: {}", e.getMessage());
         }
@@ -148,9 +150,7 @@ public class WebSocketService {
                     Map.of(
                             "pong", true,
                             "sessionId", sessionId,
-                            "timestamp", System.currentTimeMillis()
-                    )
-            );
+                            "timestamp", System.currentTimeMillis()));
         } catch (Exception e) {
             log.error("❌ Failed to send pong: {}", e.getMessage());
         }
@@ -166,9 +166,7 @@ public class WebSocketService {
                     "/queue/voice.ack",
                     Map.of(
                             "ack", sequenceNumber,
-                            "timestamp", System.currentTimeMillis()
-                    )
-            );
+                            "timestamp", System.currentTimeMillis()));
         } catch (Exception e) {
             log.error("❌ Failed to send chunk ack: {}", e.getMessage());
         }
@@ -185,9 +183,7 @@ public class WebSocketService {
                     Map.of(
                             "missingSequence", missingSequence,
                             "lastReceived", lastReceived,
-                            "timestamp", System.currentTimeMillis()
-                    )
-            );
+                            "timestamp", System.currentTimeMillis()));
         } catch (Exception e) {
             log.error("❌ Failed to request retransmission: {}", e.getMessage());
         }

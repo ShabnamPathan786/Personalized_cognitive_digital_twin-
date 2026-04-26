@@ -224,7 +224,7 @@ const SummarizationPage = () => {
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
                             <button
-                                onClick={() => navigate('/dashboard')}
+                                onClick={() => navigate('/home')}
                                 className="text-gray-600 hover:text-gray-900"
                             >
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">

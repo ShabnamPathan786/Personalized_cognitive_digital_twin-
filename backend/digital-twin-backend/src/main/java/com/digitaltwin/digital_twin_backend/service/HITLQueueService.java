@@ -6,10 +6,13 @@ import com.digitaltwin.digital_twin_backend.model.HITLQueueItem;
 import com.digitaltwin.digital_twin_backend.model.User;
 import com.digitaltwin.digital_twin_backend.repository.HITLQueueRepository;
 import com.digitaltwin.digital_twin_backend.repository.UserRepository;
+import com.digitaltwin.digital_twin_backend.websocket.VoiceSessionRegistry;
 import com.digitaltwin.digital_twin_backend.websocket.WebSocketService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -26,6 +29,7 @@ public class HITLQueueService {
     private final HITLQueueRepository queueRepository;
     private final UserRepository userRepository;
     private final WebSocketService webSocketService;
+    private final VoiceSessionRegistry voiceSessionRegistry;
     private final TTSService ttsService;
     private final NoteService noteService;
 
@@ -35,9 +39,29 @@ public class HITLQueueService {
     @Value("${app.hitl.max-retries:2}")
     private int maxRetries;
 
+    @EventListener(ApplicationReadyEvent.class)
+    public void cancelExpiredAnonymousBacklog() {
+        List<HITLQueueItem> staleItems = queueRepository.findByStatusAndUsernameIsNullAndExpiresAtBefore(
+                HITLQueueItem.QueueStatus.PENDING,
+                LocalDateTime.now());
+
+        if (staleItems.isEmpty()) {
+            return;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        staleItems.forEach(item -> {
+            item.setStatus(HITLQueueItem.QueueStatus.CANCELLED);
+            item.setNotifiedAt(now);
+        });
+        queueRepository.saveAll(staleItems);
+
+        log.info("Cancelled {} stale anonymous HITL backlog item(s) on startup", staleItems.size());
+    }
+
     public String addToQueue(String userId, String userType, String query,
-                             String context, ConfidenceScore confidence,
-                             String sessionId) {
+            String context, ConfidenceScore confidence,
+            String sessionId) {
 
         log.info("Adding item to HITL queue for user: {}", userId);
 
@@ -112,16 +136,14 @@ public class HITLQueueService {
                 "priority", item.getPriority(),
                 "createdAt", item.getCreatedAt().toString(),
                 "confidenceScore", item.getConfidenceScore(),
-                "reasons", item.getConfidenceReasons()
-        ));
+                "reasons", item.getConfidenceReasons()));
 
         log.info("Notified reviewers about new HITL item: {}", item.getId());
     }
 
     public List<HITLQueueItem> getPendingQueue() {
         return queueRepository.findByStatusOrderByPriorityAscCreatedAtAsc(
-                HITLQueueItem.QueueStatus.PENDING
-        );
+                HITLQueueItem.QueueStatus.PENDING);
     }
 
     public HITLQueueItem assignToReviewer(String itemId, String reviewerId) {
@@ -155,7 +177,7 @@ public class HITLQueueService {
     }
 
     public HITLQueueItem submitReview(String itemId, String reviewerId,
-                                      String response, String reviewerNotes) {
+            String response, String reviewerNotes) {
 
         HITLQueueItem item = queueRepository.findById(itemId)
                 .orElseThrow(() -> new RuntimeException("Item not found"));
@@ -182,8 +204,7 @@ public class HITLQueueService {
 
             if (item.getAssignedAt() != null) {
                 item.setReviewDurationSeconds(
-                        (int) java.time.Duration.between(item.getAssignedAt(), LocalDateTime.now()).getSeconds()
-                );
+                        (int) java.time.Duration.between(item.getAssignedAt(), LocalDateTime.now()).getSeconds());
             }
 
             HITLQueueItem saved = queueRepository.save(item);
@@ -200,8 +221,7 @@ public class HITLQueueService {
                             .textResponse(response)
                             .audioUrl(audioUrl)
                             .timestamp(LocalDateTime.now())
-                            .build()
-            );
+                            .build());
 
             log.info("Review submitted and response sent to username: {}", username);
 
@@ -220,15 +240,13 @@ public class HITLQueueService {
                     "User asked: %s\n\nReviewed response: %s\n\nReviewer notes: %s",
                     item.getQuery(),
                     item.getReviewedResponse(),
-                    item.getReviewerNotes() != null ? item.getReviewerNotes() : "None"
-            );
+                    item.getReviewerNotes() != null ? item.getReviewerNotes() : "None");
 
             noteService.createHITLNote(
                     item.getUserId(),
                     noteTitle,
                     noteContent,
-                    item.getId()
-            );
+                    item.getId());
 
             log.info("Saved HITL response to notes for user: {}", item.getUserId());
 
@@ -241,63 +259,108 @@ public class HITLQueueService {
     public void checkExpiredItems() {
         List<HITLQueueItem> expired = queueRepository.findByStatusAndExpiresAtBefore(
                 HITLQueueItem.QueueStatus.PENDING,
-                LocalDateTime.now()
-        );
+                LocalDateTime.now());
+
+        int cancelledAnonymousCount = 0;
 
         for (HITLQueueItem item : expired) {
+            if (isAbandonedAnonymousSession(item)) {
+                item.setStatus(HITLQueueItem.QueueStatus.CANCELLED);
+                item.setNotifiedAt(LocalDateTime.now());
+                queueRepository.save(item);
+                cancelledAnonymousCount++;
+                continue;
+            }
+
+            // ✅ GUARD: Skip if already processed (race condition protection)
+            if (item.getStatus() != HITLQueueItem.QueueStatus.PENDING) {
+                log.warn("Skipping non-PENDING item in expired query: {}", item.getId());
+                continue;
+            }
+
+            // ✅ GUARD: Skip if already hit max retries with EXPIRED status
+            if (item.getRetryCount() >= maxRetries &&
+                    item.getStatus() == HITLQueueItem.QueueStatus.EXPIRED) {
+                log.warn("Skipping already expired item: {}", item.getId());
+                continue;
+            }
+
             if (item.getRetryCount() < maxRetries) {
-
-                // ✅ FIX: Save old ID BEFORE clearing it
-                String oldId = item.getId();
-                item.setPreviousQueueId(oldId);
-                item.setId(null); // Triggers new document insert
-
+                // Retry in place so we do not leave the original PENDING document behind.
+                String queueId = item.getId();
                 item.setRetryCount(item.getRetryCount() + 1);
                 item.setExpiresAt(LocalDateTime.now().plusSeconds(reviewTimeoutSeconds));
                 item.setStatus(HITLQueueItem.QueueStatus.PENDING);
+                item.setNotifiedAt(LocalDateTime.now());
 
                 queueRepository.save(item);
                 notifyReviewers(item);
 
-                log.info("Requeued expired item: {} (retry {})", oldId, item.getRetryCount());
+                log.info("Requeued expired item: {} (retry {})", queueId, item.getRetryCount());
 
             } else {
+                // Max retries reached - mark EXPIRED and send fallback
                 item.setStatus(HITLQueueItem.QueueStatus.EXPIRED);
-                queueRepository.save(item);
+                item.setNotifiedAt(LocalDateTime.now());
+                queueRepository.save(item); // ✅ Save FIRST before sending
 
                 sendFallbackResponse(item);
 
                 log.info("Item expired after {} retries: {}", maxRetries, item.getId());
             }
         }
+
+        if (cancelledAnonymousCount > 0) {
+            log.info("Cancelled {} stale anonymous HITL item(s) for inactive sessions", cancelledAnonymousCount);
+        }
+    }
+
+    private boolean isAbandonedAnonymousSession(HITLQueueItem item) {
+        String username = item.getUsername();
+        String sessionId = item.getSessionId();
+
+        if (username != null && !username.isBlank()) {
+            return false;
+        }
+
+        return sessionId != null && !voiceSessionRegistry.isActive(sessionId);
     }
 
     private void sendFallbackResponse(HITLQueueItem item) {
-        // ✅ FIX: Route by username, not userId
         String username = item.getUsername();
-        if (username == null || username.isBlank()) {
-            log.error("Cannot send fallback — username is null for item: {}", item.getId());
-            return;
-        }
+        String sessionId = item.getSessionId();
 
         String fallbackResponse = "DEMENTIA_PATIENT".equals(item.getUserType())
                 ? "Mujhe jawab dene mein thoda time lagega. Kripya kuch der baad phir se puchhein."
                 : "I need more time to think. Please try again in a few moments.";
 
         try {
-            String audioUrl = ttsService.textToSpeech(fallbackResponse, item.getUserId());
+            // ✅ Try TTS but don't fail if it errors — send text-only response
+            String audioUrl = null;
+            try {
+                audioUrl = ttsService.textToSpeech(fallbackResponse, item.getUserId());
+            } catch (Exception ttsEx) {
+                log.warn("TTS failed for fallback, sending text-only: {}", ttsEx.getMessage());
+            }
 
-            webSocketService.sendVoiceResponse(
-                    username,
-                    VoiceResponse.builder()
-                            .status(VoiceResponse.ResponseStatus.TIMEOUT)
-                            .interactionId(item.getSessionId())
-                            .transcription(item.getQuery())
-                            .textResponse(fallbackResponse)
-                            .audioUrl(audioUrl)
-                            .timestamp(LocalDateTime.now())
-                            .build()
-            );
+            VoiceResponse response = VoiceResponse.builder()
+                    .status(VoiceResponse.ResponseStatus.TIMEOUT)
+                    .interactionId(sessionId)
+                    .transcription(item.getQuery())
+                    .textResponse(fallbackResponse)
+                    .audioUrl(audioUrl) // null is fine — frontend handles it
+                    .timestamp(LocalDateTime.now())
+                    .build();
+
+            if (username != null && !username.isBlank()) {
+                webSocketService.sendVoiceResponse(username, response);
+                log.info("Fallback sent to user: {}", username);
+            } else if (sessionId != null) {
+                webSocketService.sendToTopic("/topic/voice.response/" + sessionId, response);
+                log.info("Fallback sent to anonymous session: {}", sessionId);
+            } else {
+                log.warn("Cannot send fallback — no username or sessionId for item: {}", item.getId());
+            }
 
         } catch (Exception e) {
             log.error("Failed to send fallback response: {}", e.getMessage());

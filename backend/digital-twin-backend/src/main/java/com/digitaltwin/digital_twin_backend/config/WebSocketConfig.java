@@ -37,7 +37,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                 .withSockJS()
                 .setHeartbeatTime(25000)
                 .setDisconnectDelay(30000)
-                .setSessionCookieNeeded(false)
+                .setSessionCookieNeeded(true)
                 .setWebSocketEnabled(true)
                 .setSuppressCors(true);  // Add this to handle CORS properly
     }

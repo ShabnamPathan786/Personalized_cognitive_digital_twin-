@@ -14,18 +14,17 @@ import java.util.Map;
 @Service
 public class ConfidenceScorer {
 
-    private static final double CONTEXT_WEIGHT    = 0.40; // 40%
-    private static final double INTENT_WEIGHT     = 0.30; // 30%
+    private static final double CONTEXT_WEIGHT = 0.40; // 40%
+    private static final double INTENT_WEIGHT = 0.30; // 30%
     private static final double SPECIFICITY_WEIGHT = 0.20; // 20%
-    private static final double HISTORY_WEIGHT    = 0.10; // 10%
+    private static final double HISTORY_WEIGHT = 0.10; // 10%
 
     private static final double DEMENTIA_THRESHOLD = 65.0;
-    private static final double NORMAL_THRESHOLD   = 70.0;
+    private static final double NORMAL_THRESHOLD = 70.0;
 
     private static final List<String> EMERGENCY_KEYWORDS = List.of(
             "help", "bachao", "emergency", "sos", "ambulance",
-            "hospital", "doctor", "pain", "dard", "gir gaya"
-    );
+            "hospital", "doctor", "pain", "dard", "gir gaya");
 
     public ConfidenceScore calculate(String query, String context, Intent intent, String userType) {
 
@@ -33,8 +32,42 @@ public class ConfidenceScorer {
         List<String> reasons = new ArrayList<>();
 
         // Check emergency first — bypass scoring entirely
+        // ✅ Bypass scoring for emergency
         if (isEmergency(query)) {
             return ConfidenceScore.emergency();
+        }
+
+        // ✅ ADD THIS — Bypass scoring for greetings, always direct LLM
+        if ("GREETING".equals(intent.getType())) {
+            double threshold = "DEMENTIA_PATIENT".equals(userType) ? DEMENTIA_THRESHOLD : NORMAL_THRESHOLD;
+            return ConfidenceScore.builder()
+                    .score(95.0)
+                    .threshold(threshold)
+                    .highConfidence(true)
+                    .decision(ConfidenceScore.Decision.DIRECT_LLM)
+                    .factors(new HashMap<>())
+                    .reasons(List.of("Greeting — direct response"))
+                    .intentType("GREETING")
+                    .contextCount(0)
+                    .hasExactMatch(false)
+                    .queryComplexity(0.95f)
+                    .build();
+        }
+
+        if ("GENERAL_CHAT".equals(intent.getType())) {
+            double threshold = "DEMENTIA_PATIENT".equals(userType) ? DEMENTIA_THRESHOLD : NORMAL_THRESHOLD;
+            return ConfidenceScore.builder()
+                    .score(85.0)
+                    .threshold(threshold)
+                    .highConfidence(true)
+                    .decision(ConfidenceScore.Decision.DIRECT_LLM)
+                    .factors(new HashMap<>())
+                    .reasons(List.of("General conversation — respond directly"))
+                    .intentType("GENERAL_CHAT")
+                    .contextCount(0)
+                    .hasExactMatch(false)
+                    .queryComplexity(0.8f)
+                    .build();
         }
 
         double weightedSum = 0.0;
@@ -100,9 +133,7 @@ public class ConfidenceScorer {
                 .score(score)
                 .threshold(threshold)
                 .highConfidence(highConfidence)
-                .decision(highConfidence ?
-                        ConfidenceScore.Decision.DIRECT_LLM :
-                        ConfidenceScore.Decision.HITL_REVIEW)
+                .decision(highConfidence ? ConfidenceScore.Decision.DIRECT_LLM : ConfidenceScore.Decision.HITL_REVIEW)
                 .factors(factors)
                 .reasons(reasons)
                 .intentType(intent.getType())
@@ -125,9 +156,12 @@ public class ConfidenceScorer {
         String[] lines = context.split("\n");
         int lineCount = lines.length;
 
-        if (lineCount == 0) return 0.0;
-        if (lineCount == 1) return 0.3;
-        if (lineCount == 2) return 0.6;
+        if (lineCount == 0)
+            return 0.0;
+        if (lineCount == 1)
+            return 0.3;
+        if (lineCount == 2)
+            return 0.6;
         return 0.9; // 3+
     }
 
@@ -142,10 +176,14 @@ public class ConfidenceScorer {
                 .filter(w -> !stopWords.contains(w))
                 .count();
 
-        if (meaningfulWords == 0) return 0.2;
-        if (meaningfulWords == 1) return 0.4;
-        if (meaningfulWords == 2) return 0.6;
-        if (meaningfulWords == 3) return 0.8;
+        if (meaningfulWords == 0)
+            return 0.2;
+        if (meaningfulWords == 1)
+            return 0.4;
+        if (meaningfulWords == 2)
+            return 0.6;
+        if (meaningfulWords == 3)
+            return 0.8;
         return 1.0;
     }
 }

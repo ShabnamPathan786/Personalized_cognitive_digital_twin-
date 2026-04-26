@@ -22,6 +22,10 @@ public interface HITLQueueRepository extends MongoRepository<HITLQueueItem, Stri
     // Find expired items
     List<HITLQueueItem> findByStatusAndExpiresAtBefore(HITLQueueItem.QueueStatus status, LocalDateTime before);
 
+    List<HITLQueueItem> findByStatusAndUsernameIsNullAndExpiresAtBefore(
+            HITLQueueItem.QueueStatus status,
+            LocalDateTime before);
+
     // Find by priority
     List<HITLQueueItem> findByPriority(HITLQueueItem.PriorityLevel priority);
 
