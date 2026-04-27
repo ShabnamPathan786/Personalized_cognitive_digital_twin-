@@ -1,0 +1,194 @@
+{
+  "address": "Dt5N4RsBurrVSfFqNxsbBtNKfodYFSHtsCCXYjh9dsdZ",
+  "metadata": {
+    "name": "user",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Created with Anchor"
+  },
+  "instructions": [
+    {
+      "name": "create_profile",
+      "discriminator": [
+        225,
+        205,
+        234,
+        143,
+        17,
+        186,
+        50,
+        220
+      ],
+      "accounts": [
+        {
+          "name": "profile",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "email",
+          "type": "string"
+        },
+        {
+          "name": "phone",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "update_profile",
+      "discriminator": [
+        98,
+        67,
+        99,
+        206,
+        86,
+        115,
+        175,
+        1
+      ],
+      "accounts": [
+        {
+          "name": "profile",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "email",
+          "type": "string"
+        },
+        {
+          "name": "phone",
+          "type": "string"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "UserProfile",
+      "discriminator": [
+        32,
+        37,
+        119,
+        205,
+        179,
+        180,
+        13,
+        194
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "NameTooLong",
+      "msg": "Name must be 50 characters or less"
+    },
+    {
+      "code": 6001,
+      "name": "EmailTooLong",
+      "msg": "Email must be 50 characters or less"
+    },
+    {
+      "code": 6002,
+      "name": "PhoneTooLong",
+      "msg": "Phone must be 20 characters or less"
+    },
+    {
+      "code": 6003,
+      "name": "Unauthorized",
+      "msg": "You are not the profile owner"
+    }
+  ],
+  "types": [
+    {
+      "name": "UserProfile",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "email",
+            "type": "string"
+          },
+          {
+            "name": "phone",
+            "type": "string"
+          }
+        ]
+      }
+    }
+  ]
+}
