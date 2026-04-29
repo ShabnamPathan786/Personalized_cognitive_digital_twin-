@@ -106,12 +106,14 @@ export default function Navbar() {
               </select>
 
               {/* 🆕 Wallet Button */}
-              <div style={{
+             {
+              user ?  <div style={{
                 display: 'flex',
                 alignItems: 'center'
               }}>
                 <WalletMultiButton className="btn-secondary" />
-              </div>
+              </div> : null
+             }
             </>
           )}
 
