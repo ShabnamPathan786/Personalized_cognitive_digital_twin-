@@ -301,6 +301,19 @@ const SummarizationPage = () => {
                     </div>
                 )}
 
+                {/* Info Box */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6 shadow-sm">
+                    <h3 className="font-semibold text-blue-900 mb-1 text-sm">ℹ️ How it works & Limits:</h3>
+                    <ul className="text-xs text-blue-800 space-y-1">
+                        <li>• Upload PDF, Audio, or Video files from the Files page.</li>
+                        <li>• Audio/Video files are transcribed automatically. Summaries are saved.</li>
+                        <li>• <strong>Limits:</strong> File uploads up to 100 MB | Audio/Video up to ~25 MB (~45 mins) | PDFs up to ~200 pages | Text up to 300k chars.</li>
+                        {user?.userType === 'DEMENTIA_PATIENT' && (
+                            <li className="font-medium">• Summaries are simplified for easier understanding.</li>
+                        )}
+                    </ul>
+                </div>
+
                 {/* Tab Navigation */}
                 <div className="bg-white rounded-lg shadow-lg mb-6 overflow-hidden">
                     <div className="flex border-b overflow-x-auto">
@@ -375,6 +388,7 @@ const SummarizationPage = () => {
                                                 placeholder="https://www.youtube.com/watch?v=..."
                                                 required
                                             />
+                                            <p className="text-xs text-gray-500 mt-1">Note: Transcript extraction may time out for extremely long videos (20s limit).</p>
                                         </div>
 
                                         <button
@@ -470,19 +484,7 @@ const SummarizationPage = () => {
                     )}
                 </div>
 
-                {/* Info Box */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <h3 className="font-semibold text-blue-900 mb-2">ℹ️ How it works:</h3>
-                    <ul className="text-sm text-blue-800 space-y-1">
-                        <li>• Upload PDF, audio, or video files from the Files page</li>
-                        <li>• Click "Transcribe & Summarize" for audio/video or "Summarize" for PDFs</li>
-                        <li>• Audio and video files are transcribed using AI speech recognition</li>
-                        <li>• All summaries and transcriptions are saved automatically</li>
-                        {user?.userType === 'DEMENTIA_PATIENT' && (
-                            <li className="font-medium">• Summaries are simplified for easier understanding</li>
-                        )}
-                    </ul>
-                </div>
+                {/* Removed Info Box from bottom */}
 
                
             </main>

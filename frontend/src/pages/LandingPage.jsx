@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import Navbar from './Navbar';
 import { useAuth } from '../contexts/AuthContext';
+import Navbar from '../components/Navbar';
 
 /* ── Scroll-triggered fade-in ── */
 const useIntersection = (threshold = 0.15) => {
@@ -140,7 +140,7 @@ export default function LandingPage() {
       navigate('/home', { replace: true });
     }
   };
-  
+
   const features = [
     { icon: '💊', title: 'Medication Reminders', desc: "Automated alerts remind patients when it's time to take their medicine. Caregivers are notified immediately if a dose is missed.", accentColor: '#EA2E00', delay: 0 },
     { icon: '🚨', title: 'Emergency SOS', desc: "One tap sends an emergency alert to all linked caregivers with the patient's real-time location.", accentColor: '#C22500', delay: 0.1 },
@@ -292,7 +292,7 @@ export default function LandingPage() {
           <div style={{ width: 1, height: 44, background: 'var(--color-charcoal)', animation: 'scrollLine 1.8s ease-in-out infinite' }} />
         </div>
 
-       
+
   </section>
       <section style={{ background: 'var(--color-sage)', padding: '5rem 5vw' }}>
         <div style={{ maxWidth: 900, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '2rem' }}>

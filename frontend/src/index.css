@@ -30,25 +30,25 @@
      --color-sage-dark:     #6A9E98;
      --color-sage-light:    #C8DEDD;
      --color-sage-subtle:   #9DBDB825;
-   
+
      --color-cream:         #F0E7D6;
      --color-cream-dark:    #DDD0BA;
-   
+
      --color-ember:         #EA2E00;
      --color-ember-dark:    #C22500;
      --color-ember-light:   #FF6B3D;
      --color-ember-subtle:  #EA2E0010;
-   
+
      --color-charcoal:      #2C2C2A;
      --color-charcoal-mid:  #5F5E5A;
      --color-charcoal-muted:#888780;
-   
+
      --color-white:         #FAFAF8;
-   
+
      /* ── Typography ── */
      --font-display:  'Playfair Display', Georgia, serif;
      --font-body:     'Lato', system-ui, sans-serif;
-   
+
      /* ── Font Sizes ── */
      --text-xs:   12px;
      --text-sm:   13px;
@@ -59,7 +59,7 @@
      --text-2xl:  28px;
      --text-3xl:  36px;
      --text-4xl:  48px;
-   
+
      /* ── Spacing ── */
      --space-1:  4px;
      --space-2:  8px;
@@ -72,7 +72,7 @@
      --space-12: 48px;
      --space-16: 64px;
      --space-20: 80px;
-   
+
      /* ── Border Radius ── */
      --radius-sm:   8px;
      --radius-md:   12px;
@@ -80,44 +80,44 @@
      --radius-xl:   20px;
      --radius-2xl:  28px;
      --radius-full: 9999px;
-   
+
      /* ── Shadows ── */
      --shadow-sm:  0 4px 12px rgba(44, 44, 42, 0.08);
      --shadow-md:  0 8px 24px rgba(44, 44, 42, 0.12);
      --shadow-lg:  0 20px 40px rgba(44, 44, 42, 0.15);
      --shadow-xl:  0 40px 80px rgba(44, 44, 42, 0.15);
-   
+
      /* ── Transitions ── */
      --transition-fast:   0.15s ease;
      --transition-base:   0.2s ease;
      --transition-slow:   0.3s ease;
-   
+
      /* ── Nav ── */
      --nav-height: 72px;
    }
-   
+
    /* ── Global Base ── */
    *, *::before, *::after {
      box-sizing: border-box;
      margin: 0;
      padding: 0;
    }
-   
+
    html {
      scroll-behavior: smooth;
    }
-   
+
    body {
      background: var(--color-cream);
      font-family: var(--font-body);
      color: var(--color-charcoal);
      -webkit-font-smoothing: antialiased;
    }
-   
+
    ::selection {
      background: var(--color-sage-subtle);
    }
-   
+
    /* ── Reusable Button Classes ── */
    .btn-primary {
      font-family: var(--font-body);
@@ -135,12 +135,12 @@
      align-items: center;
      gap: var(--space-2);
    }
-   
+
    .btn-primary:hover {
      background: var(--color-ember-dark);
      transform: translateY(-2px);
    }
-   
+
    .btn-secondary {
      font-family: var(--font-body);
      font-weight: 700;
@@ -156,12 +156,12 @@
      align-items: center;
      gap: var(--space-2);
    }
-   
+
    .btn-secondary:hover {
      border-color: var(--color-charcoal);
      transform: translateY(-2px);
    }
-   
+
    .btn-ghost {
      font-family: var(--font-body);
      font-weight: 700;
@@ -174,11 +174,11 @@
      transition: color var(--transition-base);
      text-decoration: none;
    }
-   
+
    .btn-ghost:hover {
      color: var(--color-ember);
    }
-   
+
    /* ── Label / Tag ── */
    .label-tag {
      display: inline-flex;
@@ -194,7 +194,7 @@
      text-transform: uppercase;
      letter-spacing: 0.06em;
    }
-   
+
    /* ── Section Label ── */
    .section-label {
      font-family: var(--font-body);
@@ -204,7 +204,7 @@
      letter-spacing: 0.1em;
      margin-bottom: var(--space-4);
    }
-   
+
    /* ── Cards ── */
    .card {
      background: var(--color-white);
@@ -212,15 +212,15 @@
      padding: 2rem;
      border: 1.5px solid rgba(157, 189, 184, 0.2);
    }
-   
+
    .card-hover {
      transition: transform var(--transition-slow), box-shadow var(--transition-slow);
    }
-   
+
    .card-hover:hover {
      transform: translateY(-6px);
    }
-   
+
    /* ── Step Number ── */
    .step-number {
      width: 48px;
@@ -236,13 +236,13 @@
      justify-content: center;
      flex-shrink: 0;
    }
-   
+
    /* ── Animations ── */
    @keyframes float {
      0%, 100% { transform: translateY(0); }
      50%       { transform: translateY(-8px); }
    }
-   
+
    @keyframes fadeUp {
      from { opacity: 0; transform: translateY(24px); }
      to   { opacity: 1; transform: translateY(0); }

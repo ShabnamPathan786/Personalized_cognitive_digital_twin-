@@ -6,7 +6,6 @@ import com.digitaltwin.digital_twin_backend.dto.LoginRequest;
 import com.digitaltwin.digital_twin_backend.dto.AuthResponse;
 import com.digitaltwin.digital_twin_backend.dto.UserDTO;
 import com.digitaltwin.digital_twin_backend.model.User;
-import com.digitaltwin.digital_twin_backend.scheduler.MedicationScheduler;
 import com.digitaltwin.digital_twin_backend.security.CustomUserDetails;
 import com.digitaltwin.digital_twin_backend.service.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -38,7 +37,7 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
 public class AuthController {
-    private static final Logger logger = LoggerFactory.getLogger(MedicationScheduler.class);
+    private static final Logger logger = LoggerFactory.getLogger(AuthController.class);
     private final AuthService authService;
     private final AuthenticationManager authenticationManager;
 

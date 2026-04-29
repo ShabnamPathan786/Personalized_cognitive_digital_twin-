@@ -99,52 +99,15 @@ const HITLReviewDashboard = () => {
         }
     };
 
-    const handleGenerateSuggestion = async () => {
-        if (!currentItem) return;
-
-        setGeneratingSuggestion(true);
-        try {
-            const response = await hitlApi.generateSuggestion({
-                query: currentItem.query,
-                context: currentItem.retrievedContext,
-                userType: currentItem.userType
-            });
-
-            if (response.success) {
-                setAiSuggestion(response.data);
-                setReviewResponse(response.data);
-            }
-        } catch (err) {
-            setError('Failed to generate suggestion');
-        } finally {
-            setGeneratingSuggestion(false);
-        }
-    };
-
-    const handleSubmitReview = async () => {
-        if (!reviewResponse.trim()) {
-            setError('Please enter a response');
-            return;
-        }
-
+    const handleResolveOffline = async () => {
         setSubmitting(true);
         setError('');
 
         try {
-            // ✅ FIX: Calculate elapsed time from when item was opened, not from submit click
-            const elapsed = reviewStartTime.current
-                ? Math.floor((new Date() - reviewStartTime.current) / 1000)
-                : 0;
-
-            const response = await hitlApi.submitReview(currentItem.id, {
-                response: reviewResponse,
-                notes: reviewNotes,
-                timeToReview: elapsed,
-                rating: rating
-            });
+            const response = await hitlApi.resolveOffline(currentItem.id);
 
             if (response.success) {
-                setSuccess('Review submitted successfully!');
+                setSuccess('Marked as resolved offline!');
                 setCurrentItem(null);
                 reviewStartTime.current = null;
                 loadQueue();
@@ -152,7 +115,7 @@ const HITLReviewDashboard = () => {
                 setTimeout(() => setSuccess(''), 3000);
             }
         } catch (err) {
-            setError(err.response?.data?.message || 'Failed to submit review');
+            setError(err.response?.data?.message || 'Failed to resolve offline');
         } finally {
             setSubmitting(false);
         }
@@ -377,113 +340,27 @@ const HITLReviewDashboard = () => {
                                     </div>
                                 )}
 
-                                {/* AI Suggestion Button */}
-                                <div className="mb-4">
-                                    <button
-                                        onClick={handleGenerateSuggestion}
-                                        disabled={generatingSuggestion}
-                                        className="bg-purple-100 hover:bg-purple-200 text-purple-700 px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50"
-                                    >
-                                        {generatingSuggestion ? (
-                                            <span className="flex items-center gap-2">
-                                                <div className="animate-spin rounded-full h-4 w-4 border-2 border-purple-600 border-t-transparent"></div>
-                                                Generating...
-                                            </span>
-                                        ) : (
-                                            '🤖 Generate AI Suggestion'
-                                        )}
-                                    </button>
-                                </div>
-
-                                {/* AI Suggestion Display */}
-                                {aiSuggestion && (
-                                    <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
-                                        <p className="text-xs text-purple-600 mb-1">AI Suggestion:</p>
-                                        <p className="text-sm text-purple-800">{aiSuggestion}</p>
+                                {/* Action: Resolve Offline */}
+                                <div className="mt-8 bg-green-50 p-4 rounded-lg border border-green-200 text-center">
+                                    <p className="text-green-800 font-medium mb-2">📞 Contact the patient directly</p>
+                                    <p className="text-sm text-green-700 mb-4">Patient Phone: <strong>{currentItem.userPhone || 'Not available'}</strong></p>
+                                    
+                                    <div className="flex gap-3">
                                         <button
-                                            onClick={() => setReviewResponse(aiSuggestion)}
-                                            className="mt-2 text-xs text-purple-700 hover:text-purple-900"
+                                            onClick={handleResolveOffline}
+                                            disabled={submitting}
+                                            className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-bold shadow-md transition disabled:bg-gray-400"
                                         >
-                                            Use this response
+                                            {submitting ? 'Resolving...' : '✓ Mark as Resolved (Contacted Patient)'}
+                                        </button>
+                                        <button
+                                            onClick={() => handleReject(currentItem.id, 'Cannot answer')}
+                                            className="px-6 bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 py-3 rounded-lg font-medium transition"
+                                        >
+                                            Reject
                                         </button>
                                     </div>
-                                )}
-
-                                {/* Profile Access Button */}
-                                <div className="mb-4">
-                                    <button
-                                        onClick={() => alert(`Direct patient dashboard access (ID: ${currentItem.userId}) will open here.`)}
-                                        className="w-full bg-blue-50 hover:bg-blue-100 text-blue-700 px-4 py-2 rounded-lg text-sm font-medium transition"
-                                    >
-                                        👤 Access Full Patient Profile
-                                    </button>
-                                </div>
-
-                                {/* Response Input as Chat */}
-                                <div className="mb-4">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        💬 Chat Response to Patient:
-                                    </label>
-                                    <p className="text-xs text-gray-500 mb-2">Your text will be spoken directly to the patient via their voice assistant.</p>
-                                    <textarea
-                                        value={reviewResponse}
-                                        onChange={(e) => setReviewResponse(e.target.value)}
-                                        rows="4"
-                                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                                        placeholder="Type your response to the patient here..."
-                                    />
-                                </div>
-
-                                {/* Review Notes */}
-                                <div className="mb-4">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Review Notes (optional):
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={reviewNotes}
-                                        onChange={(e) => setReviewNotes(e.target.value)}
-                                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                                        placeholder="Add notes for training..."
-                                    />
-                                </div>
-
-                                {/* Rating */}
-                                <div className="mb-6">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Confidence in your response (1-5):
-                                    </label>
-                                    <div className="flex gap-2">
-                                        {[1, 2, 3, 4, 5].map(r => (
-                                            <button
-                                                key={r}
-                                                onClick={() => setRating(r)}
-                                                className={`w-10 h-10 rounded-lg font-medium transition ${rating === r
-                                                        ? 'bg-purple-600 text-white'
-                                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                                    }`}
-                                            >
-                                                {r}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* Actions */}
-                                <div className="flex gap-3">
-                                    <button
-                                        onClick={handleSubmitReview}
-                                        disabled={submitting || !reviewResponse.trim()}
-                                        className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-medium transition disabled:bg-gray-400"
-                                    >
-                                        {submitting ? 'Submitting...' : '✓ Submit Review'}
-                                    </button>
-                                    <button
-                                        onClick={() => handleReject(currentItem.id, 'Cannot answer')}
-                                        className="px-6 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-lg font-medium transition"
-                                    >
-                                        Reject
-                                    </button>
+                                    <p className="text-xs text-green-600 mt-3">Clicking resolved will clear this item without speaking back to the patient via the voice assistant.</p>
                                 </div>
                             </div>
                         ) : (

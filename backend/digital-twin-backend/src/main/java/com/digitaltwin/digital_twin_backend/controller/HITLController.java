@@ -135,6 +135,37 @@ public class HITLController {
     }
 
     /**
+     * Resolve item offline (caregiver contacted patient directly)
+     */
+    @PostMapping("/queue/{id}/resolve-offline")
+    public ResponseEntity<ApiResponse<HITLQueueItem>> resolveOffline(
+            @PathVariable String id,
+            Authentication authentication) {
+        try {
+            CustomUserDetails user = (CustomUserDetails) authentication.getPrincipal();
+            HITLQueueItem item = queueService.resolveItemOffline(id, user.getId());
+            
+            // Save review record
+            HITLReview review = new HITLReview();
+            review.setQueueId(id);
+            review.setReviewerId(user.getId());
+            review.setReviewerName(user.getUsername());
+            review.setOriginalQuery(item.getQuery());
+            review.setOriginalContext(item.getRetrievedContext());
+            review.setFinalResponse("[RESOLVED OFFLINE BY CAREGIVER]");
+            review.setReviewerNotes("Caregiver contacted patient directly");
+            review.setRating(5); // Default rating
+            review.setCreatedAt(LocalDateTime.now());
+            reviewRepository.save(review);
+
+            return ResponseEntity.ok(ApiResponse.success("Item resolved offline", item));
+        } catch (Exception e) {
+            log.error("Offline resolution failed: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        }
+    }
+
+    /**
      * Reject item (can't answer)
      */
     @PostMapping("/queue/{id}/reject")

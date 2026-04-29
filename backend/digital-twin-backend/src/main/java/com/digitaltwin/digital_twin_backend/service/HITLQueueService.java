@@ -277,6 +277,33 @@ public class HITLQueueService {
         }
     }
 
+    public HITLQueueItem resolveItemOffline(String itemId, String reviewerId) {
+        HITLQueueItem item = queueRepository.findById(itemId)
+                .orElseThrow(() -> new RuntimeException("Item not found"));
+
+        if (!reviewerId.equals(item.getReviewerId())) {
+            throw new RuntimeException("Not assigned to this reviewer");
+        }
+
+        item.setReviewedResponse("[RESOLVED OFFLINE BY CAREGIVER]");
+        item.setReviewerNotes("Caregiver contacted patient directly");
+        item.setStatus(HITLQueueItem.QueueStatus.REVIEWED);
+        item.setReviewedAt(LocalDateTime.now());
+
+        if (item.getAssignedAt() != null) {
+            item.setReviewDurationSeconds(
+                    (int) java.time.Duration.between(item.getAssignedAt(), LocalDateTime.now()).getSeconds());
+        }
+
+        HITLQueueItem saved = queueRepository.save(item);
+
+        saveToNotes(item);
+
+        log.info("Item {} resolved offline by caregiver {}", itemId, reviewerId);
+
+        return saved;
+    }
+
     private void saveToNotes(HITLQueueItem item) {
         try {
             String noteTitle = "HITL Response - " + LocalDateTime.now().toLocalDate().toString();

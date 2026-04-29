@@ -3,6 +3,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import axios from '../api/axios';
 import PatientNotesPreview from '../components/PatientNotesPreview';
+import Navbar from '../components/Navbar';
+import UserFormModal from '../components/UserFormModal';
 
 const getGreeting = () => {
   const h = new Date().getHours();
@@ -91,6 +93,7 @@ export default function Home() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [patients, setPatients] = useState([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [caregivers, setCaregivers] = useState([]);
   const [loadingPatients, setLoadingPatients] = useState(false);
   const [loadingCaregivers, setLoadingCaregivers] = useState(false);
@@ -141,13 +144,14 @@ export default function Home() {
 
   const firstName = (user?.fullName || user?.username || '').split(' ')[0];
 
-  const patientCards = [
-    { icon: '💊', title: 'Medications', desc: 'Track medicines & reminders', onClick: () => navigate('/medications'), color: '#EA2E00' },
+    const patientCards = [
+    { icon: '📅', title: 'Daily Routines', desc: 'Manage your daily schedule', onClick: () => navigate('/routines'), color: '#059669' },
     { icon: '🚨', title: 'Emergency SOS', desc: 'Alert your caregivers instantly', onClick: () => navigate('/emergency'), color: '#C22500' },
     { icon: '🎤', title: 'Voice Assistant', desc: 'Talk to your AI companion', onClick: () => navigate('/voice-helper'), color: '#9DBDB8' },
     { icon: '📝', title: 'My Notes', desc: 'Write down important things', onClick: () => navigate('/notes'), color: '#6A9E98' },
     { icon: '📁', title: 'My Files', desc: 'Store your documents safely', onClick: () => navigate('/files'), color: '#EA2E00' },
     { icon: '🤖', title: 'Simple Summaries', desc: 'Understand documents easily', onClick: () => navigate('/summarization'), color: '#6A9E98' },
+    { icon: '🔐', title: 'Secure on Chain', desc: 'Secure your identity on blockchain', onClick: () => setIsModalOpen(true), color: '#0284C7' },
   ];
 
   const caregiverCards = [
@@ -158,6 +162,7 @@ export default function Home() {
   const normalCards = [
     { icon: '📁', title: 'File Manager', desc: 'Upload & organize documents', onClick: () => navigate('/files'), color: '#EA2E00' },
     { icon: '🤖', title: 'AI Summaries', desc: 'Get smart document summaries', onClick: () => navigate('/summarization'), color: '#9DBDB8' },
+    { icon: '📅', title: 'Daily Routines', desc: 'Manage your daily schedule', onClick: () => navigate('/routines'), color: '#059669' },
     { icon: '📝', title: 'Notes', desc: 'Personal notes & reminders', onClick: () => navigate('/notes'), color: '#6A9E98' },
     { icon: '🎤', title: 'Voice Assistant', desc: 'Interact with AI via voice', onClick: () => navigate('/voice-helper'), color: '#EA2E00' },
   ];
@@ -255,6 +260,17 @@ export default function Home() {
                 </button>
               </div>
             )}
+
+            {/* Blockchain Banner */}
+            <div style={{ background: 'linear-gradient(135deg, #F0F9FF, #E0F2FE)', border: '1.5px solid #7DD3FC', borderRadius: 'var(--radius-xl)', padding: 'var(--space-5) var(--space-6)', marginBottom: 'var(--space-8)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-4)', flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: 17, fontWeight: 600, color: '#0369A1', marginBottom: 4 }}>Want to secure data on chain?</div>
+                <div style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)', color: '#075985' }}>Save your identity to the blockchain securely for permanent access.</div>
+              </div>
+              <button onClick={() => setIsModalOpen(true)} style={{ fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-sm)', background: '#0284C7', color: '#fff', border: 'none', borderRadius: 'var(--radius-full)', padding: '10px 24px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                Secure Data →
+              </button>
+            </div>
 
             {/* My Caregivers */}
             <div style={{ background: 'var(--color-white)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-4)', border: '1.5px solid var(--color-sage-light)', marginBottom: 'var(--space-8)' }}>
@@ -438,6 +454,13 @@ export default function Home() {
       <footer style={{ borderTop: '1px solid var(--color-cream-dark)', padding: 'var(--space-6) 5vw', textAlign: 'center', fontFamily: 'var(--font-body)', fontSize: 'var(--text-xs)', color: 'var(--color-charcoal-muted)' }}>
         © 2026 DigitalTwin — Built with compassion for dementia care
       </footer>
+
+      {/* User Form Modal for Blockchain Data */}
+      <UserFormModal 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+        onSave={() => setIsModalOpen(false)} 
+      />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 // 🆕 Solana imports
@@ -8,6 +8,7 @@ import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 
 export default function Navbar() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, logout } = useAuth();
   const { connected, publicKey } = useWallet();
 
@@ -85,7 +86,7 @@ export default function Navbar() {
         {/* Right Section */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
 
-          {user && (
+          {user && location.pathname !== '/' && (
             <>
               {/* 🆕 Network Selector */}
               <select

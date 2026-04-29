@@ -2,10 +2,9 @@ package com.digitaltwin.digital_twin_backend.service;
 
 import com.digitaltwin.digital_twin_backend.dto.Intent;
 import com.digitaltwin.digital_twin_backend.model.Note;
-import com.digitaltwin.digital_twin_backend.model.Medication;
 import com.digitaltwin.digital_twin_backend.model.Routine;
 import com.digitaltwin.digital_twin_backend.repository.NoteRepository;
-import com.digitaltwin.digital_twin_backend.repository.MedicationRepository;
+import com.digitaltwin.digital_twin_backend.repository.RoutineRepository;
 import com.digitaltwin.digital_twin_backend.repository.RoutineRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,7 +24,6 @@ import java.util.stream.Collectors;
 public class ContextRetrievalService {
 
     private final NoteRepository noteRepository;
-    private final MedicationRepository medicationRepository;
     private final RoutineRepository routineRepository;
 
     private static final List<String> STOP_WORDS = List.of("hai", "hain", "tha", "the", "ko",
@@ -124,29 +122,16 @@ public class ContextRetrievalService {
     }
 
     private String getMedicationContext(String userId) {
-        List<Medication> medications = medicationRepository.findByUserIdAndActiveTrue(userId);
+        List<Routine> medications = routineRepository.findByUserIdAndCategory(userId, Routine.ActivityCategory.MEDICATION);
         if (medications.isEmpty()) return null;
 
         LocalTime now = LocalTime.now();
         StringBuilder context = new StringBuilder("Current medications:\n");
 
-        for (Medication med : medications) {
-            context.append("- ").append(med.getName()).append(" ")
-                    .append(med.getDosage()).append(" at ");
+        for (Routine med : medications) {
+            context.append("- ").append(med.getActivityName()).append(" at ");
 
-            LocalTime nextDose = null;
-            if (med.getScheduledTimes() != null) {
-                for (LocalTime time : med.getScheduledTimes()) {
-                    if (time.isAfter(now)) {
-                        nextDose = time;
-                        break;
-                    }
-                }
-                if (nextDose == null && !med.getScheduledTimes().isEmpty()) {
-                    nextDose = med.getScheduledTimes().get(0);
-                }
-            }
-
+            LocalTime nextDose = med.getScheduledTime();
             context.append(nextDose != null ? nextDose.toString() : "today").append("\n");
         }
 

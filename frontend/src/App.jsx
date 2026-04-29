@@ -1,16 +1,20 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+const queryClient = new QueryClient();
+
 
 // Existing Pages
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import FilesPage from './pages/FilesPage';
-import MedicationsPage from './pages/MedicationsPage';
 import EmergencyPage from './pages/EmergencyPage';
 import ProfileSetup from './pages/ProfileSetup';
 import SummarizationPage from './pages/SummarizationPage';
 import NotesPage from './pages/NotesPage';
 import CaregiverEmergencyView from './pages/CaregiverEmergencyView';
+import RoutinePage from './pages/RoutinePage';
 
 // Voice Helper and HITL Pages
 import VoiceHelper from './components/VoiceHelper';
@@ -19,6 +23,7 @@ import HITLReviewDashboard from './components/HITLReviewDashboard';
 import './index.css';
 import LandingPage from './pages/LandingPage';
 import Home from './pages/DashboardPage';
+import SolanaProvider from './contexts/SolanaProvider';
 
 /* ==================== LOADING SPINNER ==================== */
 const LoadingSpinner = () => (
@@ -97,11 +102,14 @@ function AppRoutes() {
 
       {/* -------- PROTECTED PAGES -------- */}
       <Route path="/home" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+      <Route path="/profile-setup" element={<ProtectedRoute><ProfileSetup /></ProtectedRoute>} />
+      
+      {/* -------- CORE FEATURES -------- */}
       <Route path="/files" element={<ProtectedRoute><FilesPage /></ProtectedRoute>} />
-      <Route path="/medications" element={<ProtectedRoute><MedicationsPage /></ProtectedRoute>} />
       <Route path="/emergency" element={<ProtectedRoute><EmergencyPage /></ProtectedRoute>} />
       <Route path="/summarization" element={<ProtectedRoute><SummarizationPage /></ProtectedRoute>} />
       <Route path="/notes" element={<ProtectedRoute><NotesPage /></ProtectedRoute>} />
+      <Route path="/routines" element={<ProtectedRoute><RoutinePage /></ProtectedRoute>} />
       <Route path="/caregiver-emergency" element={<ProtectedRoute><CaregiverEmergencyView /></ProtectedRoute>} />
 
       {/* -------- VOICE HELPER -------- */}
@@ -134,7 +142,11 @@ export default function App() {
   return (
     <Router>
       <AuthProvider>
-        <AppRoutes />
+       <QueryClientProvider client={queryClient}>
+         <SolanaProvider>
+           <AppRoutes />
+         </SolanaProvider>
+       </QueryClientProvider>
       </AuthProvider>
     </Router>
   );

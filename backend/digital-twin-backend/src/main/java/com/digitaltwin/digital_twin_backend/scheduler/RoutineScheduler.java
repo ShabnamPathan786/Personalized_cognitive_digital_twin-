@@ -62,6 +62,12 @@ public class RoutineScheduler {
                 continue;
             }
 
+            // PER USER REQUEST: Limit reminder and missed alerts to MEDICATION and APPOINTMENTS only for now.
+            if (routine.getCategory() != Routine.ActivityCategory.MEDICATION && 
+                routine.getCategory() != Routine.ActivityCategory.APPOINTMENTS) {
+                continue;
+            }
+
             LocalTime scheduledTime = routine.getScheduledTime();
             checkReminder(routine, scheduledTime, now);
             checkMissed(routine, scheduledTime, now);

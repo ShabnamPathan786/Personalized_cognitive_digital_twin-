@@ -1,7 +1,5 @@
 import { useState, useEffect } from 'react';
 import { noteApi } from '../api/noteApi';
-import { medicationApi } from '../api/medicationApi';
-import { routineApi } from '../api/routineApi';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -20,9 +18,6 @@ const NotesPage = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [showPinned, setShowPinned] = useState(false);
     const [showArchived, setShowArchived] = useState(false);
-    const [selectedDay, setSelectedDay] = useState(
-        new Date().toLocaleDateString('en-US', { weekday: 'long' })
-    );
 
     // Modal states
     const [showCreateModal, setShowCreateModal] = useState(false);
@@ -37,8 +32,7 @@ const NotesPage = () => {
         type: 'PERSONAL',
         priority: 'MEDIUM',
         category: '',
-        color: '#FEF3C7',
-        daysOfWeek: [] // ADDED: to support routine days
+        color: '#FEF3C7'
     });
 
     useEffect(() => {
@@ -47,60 +41,20 @@ const NotesPage = () => {
 
     useEffect(() => {
         applyFilters();
-    }, [notes, filterType, searchQuery, showPinned, showArchived, selectedDay]);
+    }, [notes, filterType, searchQuery, showPinned, showArchived]);
 
     const loadNotes = async () => {
         setLoading(true);
         try {
-            const [regularResponse, archivedResponse, medsResponse, routinesResponse] = await Promise.all([
+            const [regularResponse, archivedResponse] = await Promise.all([
                 noteApi.getAllNotes().catch(() => ({ success: true, data: [] })),
-                noteApi.getArchivedNotes().catch(() => ({ success: true, data: [] })),
-                medicationApi.getAllMedications().catch(() => ({ success: true, data: [] })),
-                routineApi.getAllRoutines().catch(() => ({ success: true, data: [] }))
+                noteApi.getArchivedNotes().catch(() => ({ success: true, data: [] }))
             ]);
 
             let combinedNotes = [];
             
             if (regularResponse.success) combinedNotes.push(...(regularResponse.data || []));
             if (archivedResponse.success) combinedNotes.push(...(archivedResponse.data || []));
-
-            // Map Medications to Notes format
-            if (medsResponse && medsResponse.data) {
-                const medNotes = medsResponse.data.map(med => ({
-                    id: `med-${med.id}`,
-                    title: `Medication: ${med.name}`,
-                    content: `${med.dosage} - ${med.instructions || 'No special instructions.'}\nScheduled Times: ${med.scheduledTimes ? med.scheduledTimes.join(', ') : 'Not set'}`,
-                    type: 'MEDICAL',
-                    priority: 'HIGH',
-                    category: 'Medication',
-                    color: '#DBEAFE', // Blue
-                    createdAt: med.createdAt,
-                    pinned: true, // Always pin medications
-                    archived: false,
-                    isExternal: true, // Mark to prevent editing/deleting from Notes UI
-                    daysOfWeek: med.daysOfWeek || []
-                }));
-                combinedNotes.push(...medNotes);
-            }
-
-            // Map Routines to Notes format
-            if (routinesResponse && routinesResponse.data) {
-                const routineNotes = routinesResponse.data.map(r => ({
-                    id: `routine-${r.id}`,
-                    title: `${r.activityName}`,
-                    content: `${r.description || ''}\nTime: ${r.scheduledTime}\nDuration: ${r.durationMinutes} mins`,
-                    type: 'ROUTINE',
-                    priority: r.reminderEnabled ? 'HIGH' : 'MEDIUM',
-                    category: 'Daily Routine',
-                    color: '#D1FAE5', // Green
-                    createdAt: r.createdAt,
-                    pinned: false,
-                    archived: false,
-                    isExternal: true,
-                    daysOfWeek: r.daysOfWeek || []
-                }));
-                combinedNotes.push(...routineNotes);
-            }
 
             setNotes(combinedNotes);
         } catch (error) {
@@ -116,38 +70,17 @@ const NotesPage = () => {
 
         // Filter by type
         if (filterType !== 'ALL') {
-            if (filterType === 'ROUTINE') {
-                // For Routine view, show routines, medications AND reminders
-                filtered = filtered.filter(note => {
-                    if (note.type !== 'ROUTINE' && note.type !== 'MEDICAL' && note.type !== 'REMINDER') return false;
-                    
-                    if (note.type === 'REMINDER') {
-                        const noteDay = new Date(note.createdAt).toLocaleDateString('en-US', { weekday: 'long' });
-                        return noteDay === selectedDay;
-                    }
-
-                    // If it's a medication and has no specific days, assume it's daily
-                    if (note.type === 'MEDICAL' && (!note.daysOfWeek || note.daysOfWeek.length === 0)) {
-                        return true;
-                    }
-                    
-                    return note.daysOfWeek && note.daysOfWeek.includes(selectedDay);
-                });
-            } else {
-                filtered = filtered.filter(note => note.type === filterType);
-            }
+            filtered = filtered.filter(note => note.type === filterType);
         }
 
-        // Filter pinned/archived (Skip for Routine view to keep it clean)
-        if (filterType !== 'ROUTINE') {
-            if (showPinned) {
-                filtered = filtered.filter(note => note.pinned);
-            }
-            if (showArchived) {
-                filtered = filtered.filter(note => note.archived);
-            } else {
-                filtered = filtered.filter(note => !note.archived);
-            }
+        // Filter pinned/archived
+        if (showPinned) {
+            filtered = filtered.filter(note => note.pinned);
+        }
+        if (showArchived) {
+            filtered = filtered.filter(note => note.archived);
+        } else {
+            filtered = filtered.filter(note => !note.archived);
         }
 
         // Search
@@ -180,7 +113,6 @@ const NotesPage = () => {
                 setError("User not found!")
                 return;
             }
-            console.log("user:",user)
             const response = await noteApi.createNote(formData);
             if (response.success) {
                 setSuccess('✅ Note created successfully!');
@@ -246,41 +178,6 @@ const NotesPage = () => {
         }
     };
 
-    const extractTime = (content, createdAt) => {
-        // Look for "Time: 10:00" or "Scheduled Times: 10:00" or just a HH:mm pattern
-        const timeMatch = content.match(/(?:Time:|Times:)\s*(\d{1,2}:\d{2})/i) || content.match(/(\d{1,2}:\d{2})/);
-        if (timeMatch) return timeMatch[1];
-        if (createdAt) {
-            return new Date(createdAt).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
-        }
-        return '00:00';
-    };
-
-    const handleLogTaken = async (note) => {
-        if (!window.confirm('Mark this medication as taken?')) return;
-        try {
-            const medId = note.id.replace('med-', '');
-            await medicationApi.logMedicationTaken(medId);
-            setSuccess('Medication logged as taken!');
-            // We don't necessarily need to reload notes here unless we show status, but good for consistency
-            loadNotes();
-        } catch (error) {
-            setError('Failed to log medication');
-        }
-    };
-
-    const handleRoutineDone = async (note) => {
-        if (!window.confirm('Mark this routine as done?')) return;
-        try {
-            const routineId = note.id.replace('routine-', '');
-            await routineApi.logRoutineCompleted(routineId);
-            setSuccess('Routine marked as completed! 🎉');
-            loadNotes();
-        } catch (error) {
-            setError('Failed to mark routine as done');
-        }
-    };
-
     const openEditModal = (note) => {
         setSelectedNote(note);
         setFormData({
@@ -289,8 +186,7 @@ const NotesPage = () => {
             type: note.type,
             priority: note.priority,
             category: note.category || '',
-            color: note.color || '#FEF3C7',
-            daysOfWeek: note.daysOfWeek || []
+            color: note.color || '#FEF3C7'
         });
         setShowEditModal(true);
     };
@@ -307,8 +203,7 @@ const NotesPage = () => {
             type: 'PERSONAL',
             priority: 'MEDIUM',
             category: '',
-            color: '#FEF3C7',
-            daysOfWeek: []
+            color: '#FEF3C7'
         });
         setSelectedNote(null);
     };
@@ -317,10 +212,7 @@ const NotesPage = () => {
         const icons = {
             SUMMARY: '🤖',
             PERSONAL: '📝',
-            MEDICAL: '⚕️',
-            REMINDER: '⏰',
             DOCUMENT: '📄',
-            ROUTINE: '📅',
             OTHER: '📌'
         };
         return icons[type] || '📌';
@@ -401,57 +293,32 @@ const NotesPage = () => {
                             <option value="ALL">All Types</option>
                             <option value="SUMMARY">🤖 AI Summaries</option>
                             <option value="PERSONAL">📝 Personal</option>
-                            <option value="MEDICAL">⚕️ Medical</option>
-                            <option value="REMINDER">⏰ Reminders</option>
                             <option value="DOCUMENT">📄 Documents</option>
-                            <option value="ROUTINE">📅 Routine</option>
                             <option value="OTHER">📌 Other</option>
                         </select>
 
                         {/* Quick Filters */}
-                        {filterType !== 'ROUTINE' && (
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={() => setShowPinned(!showPinned)}
-                                    className={`flex-1 px-3 py-2 rounded-lg font-medium transition ${showPinned
-                                            ? 'bg-amber-600 text-white'
-                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                        }`}
-                                >
-                                    📌 Pinned
-                                </button>
-                                <button
-                                    onClick={() => setShowArchived(!showArchived)}
-                                    className={`flex-1 px-3 py-2 rounded-lg font-medium transition ${showArchived
-                                            ? 'bg-amber-600 text-white'
-                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                        }`}
-                                >
-                                    📦 Archived
-                                </button>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Day Selector for Routine */}
-                    {filterType === 'ROUTINE' && (
-                        <div className="mt-6 flex overflow-x-auto gap-2 pb-2 scrollbar-hide">
-                            {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => (
-                                <button
-                                    key={day}
-                                    onClick={() => setSelectedDay(day)}
-                                    className={`px-6 py-2 rounded-full whitespace-nowrap font-bold transition-all shadow-sm ${
-                                        selectedDay === day 
-                                        ? 'bg-amber-600 text-white shadow-md transform scale-105' 
-                                        : 'bg-orange-100 text-amber-800 hover:bg-orange-200'
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setShowPinned(!showPinned)}
+                                className={`flex-1 px-3 py-2 rounded-lg font-medium transition ${showPinned
+                                        ? 'bg-amber-600 text-white'
+                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                     }`}
-                                >
-                                    {day}
-                                </button>
-                            ))}
+                            >
+                                📌 Pinned
+                            </button>
+                            <button
+                                onClick={() => setShowArchived(!showArchived)}
+                                className={`flex-1 px-3 py-2 rounded-lg font-medium transition ${showArchived
+                                        ? 'bg-amber-600 text-white'
+                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    }`}
+                            >
+                                📦 Archived
+                            </button>
                         </div>
-                    )}
-
+                    </div>
 
                     <div className="mt-3 text-sm text-gray-600">
                         Showing {filteredNotes.length} of {notes.length} notes
@@ -477,55 +344,13 @@ const NotesPage = () => {
                             Create Your First Note
                         </button>
                     </div>
-                ) : filterType === 'ROUTINE' ? (
-                    <div className="space-y-4 max-w-3xl mx-auto">
-                        {[...filteredNotes].sort((a, b) => {
-                            const timeA = extractTime(a.content, a.createdAt);
-                            const timeB = extractTime(b.content, b.createdAt);
-                            return timeA.localeCompare(timeB);
-                        }).map((note) => (
-                            <div key={note.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex items-center gap-4 hover:shadow-md transition">
-                                <div className="text-center min-w-[80px]">
-                                    <div className="text-lg font-bold text-gray-900">{extractTime(note.content, note.createdAt)}</div>
-                                    <div className="text-xs text-gray-500 font-medium tracking-wide uppercase mt-1">
-                                        {note.type === 'MEDICAL' ? 'Med' : note.type === 'REMINDER' ? 'Remind' : 'Routine'}
-                                    </div>
-                                </div>
-                                
-                                <div className={`w-2 h-14 rounded-full flex-shrink-0 ${note.type === 'MEDICAL' ? 'bg-blue-400' : note.type === 'REMINDER' ? 'bg-amber-400' : 'bg-green-400'}`}></div>
-                                
-                                <div className="flex-1 min-w-0">
-                                    <h3 className="font-bold text-gray-900 text-lg truncate">{note.title}</h3>
-                                    <p className="text-gray-600 text-sm line-clamp-2 mt-1">{note.content.split('\n')[0]}</p>
-                                </div>
-                                
-                                <div className="flex-shrink-0">
-                                    {note.type === 'MEDICAL' ? (
-                                        <button 
-                                            onClick={(e) => { e.stopPropagation(); handleLogTaken(note); }}
-                                            className="px-4 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-lg font-bold text-sm transition shadow-sm"
-                                        >
-                                            ✓ Taken
-                                        </button>
-                                    ) : (
-                                        <button 
-                                            onClick={(e) => { e.stopPropagation(); handleRoutineDone(note); }}
-                                            className="px-4 py-2 bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 rounded-lg font-bold text-sm transition shadow-sm"
-                                        >
-                                            ✓ Done
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {filteredNotes.map((note) => (
                             <div
                                 key={note.id}
                                 onClick={() => openViewModal(note)}
-                                className="rounded-lg p-4 shadow-md hover:shadow-xl transition relative cursor-pointer transform hover:-translate-y-1"
+                                className="rounded-lg p-4 shadow-md hover:shadow-xl transition relative cursor-pointer transform hover:-translate-y-1 flex flex-col h-full"
                                 style={{ backgroundColor: note.color || '#FEF3C7' }}
                             >
                                 {/* Pin Icon */}
@@ -543,10 +368,10 @@ const NotesPage = () => {
                                             {note.title}
                                         </h3>
                                         <div className="flex items-center gap-2 text-xs text-gray-600 mt-1">
-                                            <span className="bg-white/50 px-2 py-0.5 rounded">
+                                            <span className="bg-white/50 px-2 py-0.5 rounded font-bold uppercase tracking-wide">
                                                 {note.type}
                                             </span>
-                                            <span className={`font-medium ${getPriorityColor(note.priority)}`}>
+                                            <span className={`font-bold ${getPriorityColor(note.priority)}`}>
                                                 {note.priority}
                                             </span>
                                         </div>
@@ -554,14 +379,14 @@ const NotesPage = () => {
                                 </div>
 
                                 {/* Content */}
-                                <p className="text-gray-800 text-sm mb-3 line-clamp-4">
+                                <p className="text-gray-800 text-sm mb-3 line-clamp-4 flex-grow">
                                     {note.content}
                                 </p>
 
                                 {/* Category */}
                                 {note.category && (
                                     <div className="mb-3">
-                                        <span className="inline-block bg-white/70 text-gray-700 text-xs px-2 py-1 rounded">
+                                        <span className="inline-block bg-white/70 text-gray-700 text-xs px-2 py-1 rounded font-semibold">
                                             🏷️ {note.category}
                                         </span>
                                     </div>
@@ -569,58 +394,49 @@ const NotesPage = () => {
 
                                 {/* Source File */}
                                 {note.sourceFileName && (
-                                    <div className="mb-3 text-xs text-gray-600">
+                                    <div className="mb-3 text-xs text-gray-600 font-medium">
                                         📎 From: {note.sourceFileName}
                                     </div>
                                 )}
 
                                 {/* Footer */}
                                 <div className="flex items-center justify-between text-xs text-gray-600 mb-3">
-                                    <span>{new Date(note.createdAt).toLocaleDateString()}</span>
+                                    <span className="font-medium">{new Date(note.createdAt).toLocaleDateString()}</span>
                                     {note.archived && (
-                                        <span className="bg-gray-200 px-2 py-0.5 rounded">Archived</span>
+                                        <span className="bg-gray-200 px-2 py-0.5 rounded font-bold">Archived</span>
                                     )}
                                 </div>
 
                                 {/* Actions */}
-                                {!note.isExternal && (
-                                    <div className="flex gap-2 relative z-10 pt-2 border-t border-black/5 mt-auto">
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); openEditModal(note); }}
-                                            className="flex-1 bg-white/50 hover:bg-white text-gray-700 px-3 py-1.5 rounded text-sm font-medium transition shadow-sm"
-                                        >
-                                            ✏️ Edit
-                                        </button>
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); handleTogglePin(note.id); }}
-                                            title={note.pinned ? "Unpin" : "Pin"}
-                                            className="bg-white/50 hover:bg-white text-gray-700 px-3 py-1.5 rounded text-sm transition shadow-sm"
-                                        >
-                                            {note.pinned ? '📌' : '📍'}
-                                        </button>
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); handleToggleArchive(note.id); }}
-                                            title={note.archived ? "Unarchive" : "Archive"}
-                                            className="bg-white/50 hover:bg-white text-gray-700 px-3 py-1.5 rounded text-sm font-medium transition flex items-center justify-center shadow-sm"
-                                        >
-                                            {note.archived ? '📤' : '📥'}
-                                        </button>
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); handleDeleteNote(note.id); }}
-                                            title="Delete"
-                                            className="bg-red-500/80 hover:bg-red-600 text-white px-3 py-1.5 rounded text-sm transition shadow-sm"
-                                        >
-                                            🗑️
-                                        </button>
-                                    </div>
-                                )}
-                                {note.isExternal && (
-                                    <div className="flex gap-2 relative z-10 pt-2 border-t border-black/5 mt-auto">
-                                        <div className="text-xs text-gray-500 italic flex-1 text-center py-1">
-                                            Managed externally (Medication/Routine)
-                                        </div>
-                                    </div>
-                                )}
+                                <div className="flex gap-2 relative z-10 pt-2 border-t border-black/5 mt-auto">
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); openEditModal(note); }}
+                                        className="flex-1 bg-white/50 hover:bg-white text-gray-700 px-3 py-1.5 rounded text-sm font-bold transition shadow-sm"
+                                    >
+                                        ✏️ Edit
+                                    </button>
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); handleTogglePin(note.id); }}
+                                        title={note.pinned ? "Unpin" : "Pin"}
+                                        className="bg-white/50 hover:bg-white text-gray-700 px-3 py-1.5 rounded text-sm transition shadow-sm"
+                                    >
+                                        {note.pinned ? '📌' : '📍'}
+                                    </button>
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); handleToggleArchive(note.id); }}
+                                        title={note.archived ? "Unarchive" : "Archive"}
+                                        className="bg-white/50 hover:bg-white text-gray-700 px-3 py-1.5 rounded text-sm font-medium transition flex items-center justify-center shadow-sm"
+                                    >
+                                        {note.archived ? '📤' : '📥'}
+                                    </button>
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); handleDeleteNote(note.id); }}
+                                        title="Delete"
+                                        className="bg-red-500/80 hover:bg-red-600 text-white px-3 py-1.5 rounded text-sm transition shadow-sm"
+                                    >
+                                        🗑️
+                                    </button>
+                                </div>
                             </div>
                         ))}
                     </div>
@@ -645,7 +461,7 @@ const NotesPage = () => {
                                         {selectedNote.title}
                                     </h2>
                                     <div className="flex flex-wrap items-center gap-2 text-sm text-gray-700">
-                                        <span className="bg-white/60 px-3 py-1 rounded-full font-bold shadow-sm">
+                                        <span className="bg-white/60 px-3 py-1 rounded-full font-bold shadow-sm uppercase tracking-wide">
                                             {selectedNote.type}
                                         </span>
                                         <span className={`font-bold bg-white/60 px-3 py-1 rounded-full shadow-sm ${getPriorityColor(selectedNote.priority)}`}>
@@ -656,7 +472,7 @@ const NotesPage = () => {
                                                 🏷️ {selectedNote.category}
                                             </span>
                                         )}
-                                        <span className="text-xs ml-2 opacity-70 font-medium">
+                                        <span className="text-xs ml-2 opacity-70 font-bold">
                                             {new Date(selectedNote.createdAt).toLocaleDateString()}
                                         </span>
                                     </div>
@@ -686,17 +502,15 @@ const NotesPage = () => {
                                 </div>
                             ) : <div></div>}
                             
-                            {!selectedNote.isExternal && (
-                                <button
-                                    onClick={() => {
-                                        setShowViewModal(false);
-                                        openEditModal(selectedNote);
-                                    }}
-                                    className="bg-white hover:bg-gray-50 text-gray-900 px-6 py-2.5 rounded-xl font-bold transition shadow-md hover:shadow-lg border border-gray-100 flex items-center gap-2"
-                                >
-                                    ✏️ Edit Note
-                                </button>
-                            )}
+                            <button
+                                onClick={() => {
+                                    setShowViewModal(false);
+                                    openEditModal(selectedNote);
+                                }}
+                                className="bg-white hover:bg-gray-50 text-gray-900 px-6 py-2.5 rounded-xl font-bold transition shadow-md hover:shadow-lg border border-gray-100 flex items-center gap-2"
+                            >
+                                ✏️ Edit Note
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -705,9 +519,9 @@ const NotesPage = () => {
             {/* Create/Edit Modal */}
             {(showCreateModal || showEditModal) && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
-                        <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-2xl font-bold text-gray-900">
+                    <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-8 shadow-2xl">
+                        <div className="flex justify-between items-center mb-6 border-b pb-4">
+                            <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
                                 {showEditModal ? '✏️ Edit Note' : '➕ Create Note'}
                             </h2>
                             <button
@@ -716,68 +530,66 @@ const NotesPage = () => {
                                     setShowEditModal(false);
                                     resetForm();
                                 }}
-                                className="text-gray-500 hover:text-gray-700 text-2xl"
+                                className="text-gray-500 hover:text-gray-900 text-3xl font-light"
                             >
                                 ×
                             </button>
                         </div>
 
-                        <form onSubmit={showEditModal ? handleUpdateNote : handleCreateNote} className="space-y-4">
+                        <form onSubmit={showEditModal ? handleUpdateNote : handleCreateNote} className="space-y-5">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                <label className="block text-sm font-bold text-gray-700 mb-2">
                                     Title *
                                 </label>
                                 <input
                                     type="text"
                                     value={formData.title}
                                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 bg-gray-50 font-medium"
                                     required
                                     placeholder="Enter note title..."
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                <label className="block text-sm font-bold text-gray-700 mb-2">
                                     Content *
                                 </label>
                                 <textarea
                                     value={formData.content}
                                     onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 bg-gray-50 font-medium resize-none"
                                     rows="6"
                                     required
                                     placeholder="Enter your note..."
                                 />
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-2 gap-6">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <label className="block text-sm font-bold text-gray-700 mb-2">
                                         Type
                                     </label>
                                     <select
                                         value={formData.type}
                                         onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 bg-gray-50 font-medium"
                                     >
                                         <option value="PERSONAL">📝 Personal</option>
-                                        <option value="MEDICAL">⚕️ Medical</option>
-                                        <option value="REMINDER">⏰ Reminder</option>
                                         <option value="DOCUMENT">📄 Document</option>
-                                        <option value="ROUTINE">📅 Routine</option>
+                                        <option value="SUMMARY">🤖 AI Summary</option>
                                         <option value="OTHER">📌 Other</option>
                                     </select>
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <label className="block text-sm font-bold text-gray-700 mb-2">
                                         Priority
                                     </label>
                                     <select
                                         value={formData.priority}
                                         onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 bg-gray-50 font-medium"
                                     >
                                         <option value="LOW">Low</option>
                                         <option value="MEDIUM">Medium</option>
@@ -787,43 +599,17 @@ const NotesPage = () => {
                                 </div>
                             </div>
 
-                            {/* Show Day Selection if type is ROUTINE */}
-                            {formData.type === 'ROUTINE' && (
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Select Day
-                                    </label>
-                                    <select
-                                        value={formData.daysOfWeek && formData.daysOfWeek.length > 0 ? formData.daysOfWeek[0] : ''}
-                                        onChange={(e) => setFormData({ ...formData, daysOfWeek: [e.target.value] })}
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                                        required
-                                    >
-                                        <option value="" disabled>Choose a day...</option>
-                                        <option value="Monday">Monday</option>
-                                        <option value="Tuesday">Tuesday</option>
-                                        <option value="Wednesday">Wednesday</option>
-                                        <option value="Thursday">Thursday</option>
-                                        <option value="Friday">Friday</option>
-                                        <option value="Saturday">Saturday</option>
-                                        <option value="Sunday">Sunday</option>
-                                    </select>
-                                </div>
-                            )}
-
-
-
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Color
+                                <label className="block text-sm font-bold text-gray-700 mb-2">
+                                    Color Theme
                                 </label>
-                                <div className="flex gap-2">
+                                <div className="flex gap-3">
                                     {['#FEF3C7', '#DBEAFE', '#FCE7F3', '#D1FAE5', '#FED7AA', '#E9D5FF'].map(color => (
                                         <button
                                             key={color}
                                             type="button"
                                             onClick={() => setFormData({ ...formData, color })}
-                                            className={`w-10 h-10 rounded-lg border-2 ${formData.color === color ? 'border-gray-900' : 'border-gray-300'
+                                            className={`w-12 h-12 rounded-full border-4 shadow-sm transition-transform hover:scale-110 ${formData.color === color ? 'border-gray-800 scale-110' : 'border-transparent'
                                                 }`}
                                             style={{ backgroundColor: color }}
                                         />
@@ -831,14 +617,7 @@ const NotesPage = () => {
                                 </div>
                             </div>
 
-                            <div className="flex gap-3 pt-4">
-                                <button
-                                    type="submit"
-                                    disabled={loading}
-                                    className="flex-1 bg-amber-600 text-white py-2 px-4 rounded-lg hover:bg-amber-700 font-medium disabled:bg-gray-400"
-                                >
-                                    {loading ? 'Saving...' : showEditModal ? 'Update Note' : 'Create Note'}
-                                </button>
+                            <div className="flex gap-4 pt-6 border-t mt-6">
                                 <button
                                     type="button"
                                     onClick={() => {
@@ -846,9 +625,16 @@ const NotesPage = () => {
                                         setShowEditModal(false);
                                         resetForm();
                                     }}
-                                    className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                                    className="flex-1 px-6 py-3 border-2 border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 font-bold transition"
                                 >
                                     Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={loading}
+                                    className="flex-1 bg-amber-600 text-white py-3 px-6 rounded-xl hover:bg-amber-700 font-bold disabled:bg-gray-400 transition shadow-md"
+                                >
+                                    {loading ? 'Saving...' : showEditModal ? 'Update Note' : 'Create Note'}
                                 </button>
                             </div>
                         </form>

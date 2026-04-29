@@ -57,97 +57,118 @@ public class RoutineService {
     }
 
     public List<Routine> seedDummyData(String userId) {
-        // Clear old ones first for clean seed? Optional, but good for idempotent seeds
-        // We will just add standard routines
-        
         List<Routine> seeded = new java.util.ArrayList<>();
         List<String> allDays = java.util.Arrays.asList("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday");
         List<String> weekdays = java.util.Arrays.asList("Monday", "Tuesday", "Wednesday", "Thursday", "Friday");
-        List<String> weekend = java.util.Arrays.asList("Saturday", "Sunday");
+        List<String> weekends = java.util.Arrays.asList("Saturday", "Sunday");
 
-        // 1. Sleep Time
-        Routine sleep = new Routine();
-        sleep.setUserId(userId);
-        sleep.setActivityName("Sleep Time");
-        sleep.setDescription("Go to bed and get a good night's rest.");
-        sleep.setCategory(Routine.ActivityCategory.BEDTIME);
-        sleep.setScheduledTime(java.time.LocalTime.of(22, 0));
-        sleep.setDurationMinutes(480); // 8 hours
-        sleep.setDaysOfWeek(allDays);
-        sleep.setReminderEnabled(true);
-        seeded.add(createRoutine(sleep));
+        // 1. Morning Wake & Hydrate
+        Routine morningWake = new Routine();
+        morningWake.setUserId(userId);
+        morningWake.setActivityName("Morning Wake & Hydrate");
+        morningWake.setDescription("Wake up slowly and drink a full glass of water to start the day.");
+        morningWake.setCategory(Routine.ActivityCategory.MORNING_ROUTINE);
+        morningWake.setScheduledTime(java.time.LocalTime.of(7, 30));
+        morningWake.setDurationMinutes(30);
+        morningWake.setDaysOfWeek(allDays);
+        morningWake.setReminderEnabled(true);
+        seeded.add(createRoutine(morningWake));
 
-        // 2. Wake Up & Hygiene
-        Routine wakeUp = new Routine();
-        wakeUp.setUserId(userId);
-        wakeUp.setActivityName("Morning Hygiene");
-        wakeUp.setDescription("Wake up, brush teeth, shower.");
-        wakeUp.setCategory(Routine.ActivityCategory.HYGIENE);
-        wakeUp.setScheduledTime(java.time.LocalTime.of(7, 0));
-        wakeUp.setDurationMinutes(30);
-        wakeUp.setDaysOfWeek(allDays);
-        wakeUp.setReminderEnabled(true);
-        seeded.add(createRoutine(wakeUp));
+        // 2. Breakfast & Morning Meds
+        Routine breakfastMeds = new Routine();
+        breakfastMeds.setUserId(userId);
+        breakfastMeds.setActivityName("Breakfast & Morning Medication");
+        breakfastMeds.setDescription("Eat a nutritious breakfast and take prescribed morning vitamins/medication.");
+        breakfastMeds.setCategory(Routine.ActivityCategory.MEDICATION);
+        breakfastMeds.setScheduledTime(java.time.LocalTime.of(8, 0));
+        breakfastMeds.setDurationMinutes(45);
+        breakfastMeds.setDaysOfWeek(allDays);
+        breakfastMeds.setReminderEnabled(true);
+        seeded.add(createRoutine(breakfastMeds));
 
-        // 3. Breakfast
-        Routine breakfast = new Routine();
-        breakfast.setUserId(userId);
-        breakfast.setActivityName("Breakfast");
-        breakfast.setDescription("Eat a healthy morning meal.");
-        breakfast.setCategory(Routine.ActivityCategory.MEALS);
-        breakfast.setScheduledTime(java.time.LocalTime.of(8, 0));
-        breakfast.setDurationMinutes(30);
-        breakfast.setDaysOfWeek(allDays);
-        breakfast.setReminderEnabled(true);
-        seeded.add(createRoutine(breakfast));
+        // 3. Cognitive Therapy / Memory Games
+        Routine cognitiveTherapy = new Routine();
+        cognitiveTherapy.setUserId(userId);
+        cognitiveTherapy.setActivityName("Cognitive Exercise");
+        cognitiveTherapy.setDescription("Engage in memory games, puzzles, or reading to keep the mind sharp.");
+        cognitiveTherapy.setCategory(Routine.ActivityCategory.RECREATION);
+        cognitiveTherapy.setScheduledTime(java.time.LocalTime.of(10, 0));
+        cognitiveTherapy.setDurationMinutes(60);
+        cognitiveTherapy.setDaysOfWeek(weekdays);
+        cognitiveTherapy.setReminderEnabled(true);
+        seeded.add(createRoutine(cognitiveTherapy));
 
-        // 4. Study/Work Time
-        Routine study = new Routine();
-        study.setUserId(userId);
-        study.setActivityName("Study & Cognitive Exercises");
-        study.setDescription("Dedicated time for learning and cognitive exercises.");
-        study.setCategory(Routine.ActivityCategory.OTHER); // Can use RECREATION or OTHER
-        study.setScheduledTime(java.time.LocalTime.of(10, 0));
-        study.setDurationMinutes(120); // 2 hours
-        study.setDaysOfWeek(weekdays); // Only weekdays
-        study.setReminderEnabled(true);
-        seeded.add(createRoutine(study));
+        // 4. Light Physical Exercise
+        Routine exercise = new Routine();
+        exercise.setUserId(userId);
+        exercise.setActivityName("Light Physical Activity");
+        exercise.setDescription("Take a short walk in the garden or perform seated stretches.");
+        exercise.setCategory(Routine.ActivityCategory.EXERCISE);
+        exercise.setScheduledTime(java.time.LocalTime.of(11, 30));
+        exercise.setDurationMinutes(30);
+        exercise.setDaysOfWeek(allDays);
+        exercise.setReminderEnabled(true);
+        seeded.add(createRoutine(exercise));
 
-        // 5. Lunch
+        // 5. Lunch Time
         Routine lunch = new Routine();
         lunch.setUserId(userId);
-        lunch.setActivityName("Lunch Time");
-        lunch.setDescription("Mid-day meal.");
+        lunch.setActivityName("Lunch");
+        lunch.setDescription("Enjoy a balanced mid-day meal.");
         lunch.setCategory(Routine.ActivityCategory.MEALS);
         lunch.setScheduledTime(java.time.LocalTime.of(13, 0));
         lunch.setDurationMinutes(45);
         lunch.setDaysOfWeek(allDays);
         lunch.setReminderEnabled(true);
         seeded.add(createRoutine(lunch));
-        
-        // 6. Relaxation / Recreation
-        Routine recreation = new Routine();
-        recreation.setUserId(userId);
-        recreation.setActivityName("Relaxation & Hobbies");
-        recreation.setDescription("Time for reading, TV, or hobbies.");
-        recreation.setCategory(Routine.ActivityCategory.RECREATION);
-        recreation.setScheduledTime(java.time.LocalTime.of(15, 0));
-        recreation.setDurationMinutes(60);
-        recreation.setDaysOfWeek(weekend); // Only weekends
-        recreation.setReminderEnabled(false);
-        seeded.add(createRoutine(recreation));
 
-        // 7. Dinner
-        Routine dinner = new Routine();
-        dinner.setUserId(userId);
-        dinner.setActivityName("Dinner");
-        dinner.setDescription("Evening meal with family.");
-        dinner.setCategory(Routine.ActivityCategory.MEALS);
-        dinner.setScheduledTime(java.time.LocalTime.of(19, 0));
-        dinner.setDurationMinutes(45);
-        dinner.setDaysOfWeek(allDays);
-        dinner.setReminderEnabled(true);
-        seeded.add(createRoutine(dinner));
+        // 6. Rest / Afternoon Nap
+        Routine rest = new Routine();
+        rest.setUserId(userId);
+        rest.setActivityName("Afternoon Rest");
+        rest.setDescription("Quiet time or a short nap to recharge energy levels.");
+        rest.setCategory(Routine.ActivityCategory.HYGIENE); // closest fit or OTHER
+        rest.setScheduledTime(java.time.LocalTime.of(14, 0));
+        rest.setDurationMinutes(90);
+        rest.setDaysOfWeek(allDays);
+        rest.setReminderEnabled(false);
+        seeded.add(createRoutine(rest));
+
+        // 7. Social Family Call
+        Routine socialCall = new Routine();
+        socialCall.setUserId(userId);
+        socialCall.setActivityName("Family Connect");
+        socialCall.setDescription("Call or video chat with family members to catch up.");
+        socialCall.setCategory(Routine.ActivityCategory.SOCIAL);
+        socialCall.setScheduledTime(java.time.LocalTime.of(17, 0));
+        socialCall.setDurationMinutes(30);
+        socialCall.setDaysOfWeek(weekends); // Can be weekends or specific days
+        socialCall.setReminderEnabled(true);
+        seeded.add(createRoutine(socialCall));
+
+        // 8. Dinner & Evening Meds
+        Routine dinnerMeds = new Routine();
+        dinnerMeds.setUserId(userId);
+        dinnerMeds.setActivityName("Dinner & Evening Medication");
+        dinnerMeds.setDescription("Light evening meal followed by nighttime medications.");
+        dinnerMeds.setCategory(Routine.ActivityCategory.MEDICATION);
+        dinnerMeds.setScheduledTime(java.time.LocalTime.of(19, 0));
+        dinnerMeds.setDurationMinutes(45);
+        dinnerMeds.setDaysOfWeek(allDays);
+        dinnerMeds.setReminderEnabled(true);
+        seeded.add(createRoutine(dinnerMeds));
+
+        // 9. Wind Down & Bedtime
+        Routine bedtime = new Routine();
+        bedtime.setUserId(userId);
+        bedtime.setActivityName("Wind Down & Sleep");
+        bedtime.setDescription("Evening hygiene, relaxing music, and prepare for bed.");
+        bedtime.setCategory(Routine.ActivityCategory.BEDTIME);
+        bedtime.setScheduledTime(java.time.LocalTime.of(21, 30));
+        bedtime.setDurationMinutes(60);
+        bedtime.setDaysOfWeek(allDays);
+        bedtime.setReminderEnabled(true);
+        seeded.add(createRoutine(bedtime));
 
         return seeded;
     }

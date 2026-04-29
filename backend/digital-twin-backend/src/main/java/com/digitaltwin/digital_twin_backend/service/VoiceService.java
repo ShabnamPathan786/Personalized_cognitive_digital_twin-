@@ -4,7 +4,6 @@ import com.digitaltwin.digital_twin_backend.dto.ConfidenceScore;
 import com.digitaltwin.digital_twin_backend.dto.Intent;
 import com.digitaltwin.digital_twin_backend.dto.VoiceResponse;
 import com.digitaltwin.digital_twin_backend.model.AudioChunk;
-import com.digitaltwin.digital_twin_backend.model.Medication;
 import com.digitaltwin.digital_twin_backend.model.Note;
 import com.digitaltwin.digital_twin_backend.model.Routine;
 import com.digitaltwin.digital_twin_backend.model.VoiceInteraction;
@@ -57,7 +56,6 @@ public class VoiceService {
 
     // ✅ ADD: Repositories for personal assistant
     private final com.digitaltwin.digital_twin_backend.repository.NoteRepository noteRepository;
-    private final com.digitaltwin.digital_twin_backend.repository.MedicationRepository medicationRepository;
     private final RoutineRepository routineRepository;
 
     @Value("${app.assemblyai.api.key}")
@@ -301,32 +299,14 @@ public class VoiceService {
         }
 
         List<String> greetingPhrases = List.of(
-                "hi",
-                "hello",
-                "hey",
-                "helo",
-                "hlo",
-                "hallo",
-                "namaste",
-                "hello hello",
-                "helo helo",
-                "هلو",
-                "هلو هلو",
-                "مرحبا",
-                "हेलो",
-                "हैलो",
-                "good morning",
-                "good afternoon",
-                "good evening",
-                "how are you",
-                "kaise ho",
-                "kaise ho tum");
+                "hi", "hello", "hey", "helo", "hlo", "hallo", "namaste",
+                "hello hello", "helo helo", "هلو", "هلو هلو", "مرحبا",
+                "हेलो", "हैलो", "good morning", "good afternoon", "good evening",
+                "how are you", "kaise ho", "kaise ho tum", "hi there", "hello there", "hey there");
 
-        return greetingPhrases.stream().anyMatch(phrase ->
-                normalized.equals(phrase)
-                        || normalized.startsWith(phrase + " ")
-                        || normalized.endsWith(" " + phrase)
-                        || normalized.contains(" " + phrase + " "));
+        // ONLY trigger the hardcoded greeting shortcut if the entire query is JUST a greeting.
+        // If they say "Hey tell me my schedule", it should NOT be swallowed as a greeting.
+        return greetingPhrases.stream().anyMatch(normalized::equals);
     }
 
     private DisplayLanguage detectDisplayLanguage(String text) {
@@ -486,19 +466,8 @@ public class VoiceService {
         LocalDateTime startOfDay = today.atStartOfDay();
         LocalDateTime endOfDay = today.plusDays(1).atStartOfDay();
 
-        List<Medication> medications = new ArrayList<>();
         List<Note> reminders = new ArrayList<>();
         List<Routine> routines = new ArrayList<>();
-
-        try {
-            List<Medication> medicationResults = medicationRepository.findByUserIdAndActiveTrue(userId);
-            medications = medicationResults == null ? new ArrayList<>() : medicationResults.stream()
-                    .filter(this::isMedicationScheduledToday)
-                    .sorted(Comparator.comparing(this::firstScheduledTimeOrEndOfDay))
-                    .toList();
-        } catch (Exception e) {
-            log.warn("Could not fetch medications for user {}: {}", userId, e.getMessage());
-        }
 
         try {
             List<Note> reminderResults = noteRepository.findByUserIdAndTypeAndDateRange(
@@ -511,21 +480,29 @@ public class VoiceService {
         try {
             List<Routine> routineResults = routineRepository.findByUserIdAndActiveTrue(userId);
             routines = routineResults == null ? new ArrayList<>() : routineResults.stream()
-                    .filter(this::isRoutineScheduledToday)
+                    .filter(this::isRoutineUpcomingToday)
                     .sorted(Comparator.comparing(Routine::getScheduledTime, Comparator.nullsLast(Comparator.naturalOrder())))
-                    .limit(4)
+                    .limit(6)
                     .toList();
         } catch (Exception e) {
             log.warn("Could not fetch routines for user {}: {}", userId, e.getMessage());
         }
 
+        List<Routine> medicationRoutines = routines.stream()
+                .filter(r -> r.getCategory() == Routine.ActivityCategory.MEDICATION)
+                .toList();
+        List<Routine> otherRoutines = routines.stream()
+                .filter(r -> r.getCategory() != Routine.ActivityCategory.MEDICATION)
+                .limit(4)
+                .toList();
+
         return dementiaStyle
-                ? buildDementiaAssistantResponse(today, medications, reminders, routines)
-                : buildStandardAssistantResponse(today, medications, reminders, routines);
+                ? buildDementiaAssistantResponse(today, medicationRoutines, reminders, otherRoutines)
+                : buildStandardAssistantResponse(today, medicationRoutines, reminders, otherRoutines);
     }
 
     private String buildDementiaAssistantResponse(LocalDate today,
-            List<Medication> medications,
+            List<Routine> medications,
             List<Note> reminders,
             List<Routine> routines) {
 
@@ -535,14 +512,11 @@ public class VoiceService {
                 .append(" है। ");
 
         if (!medications.isEmpty()) {
-            Medication nextMedication = medications.get(0);
+            Routine nextMedication = medications.get(0);
             response.append("आपकी दवाई ");
-            response.append(nextMedication.getName());
-            if (nextMedication.getDosage() != null && !nextMedication.getDosage().isBlank()) {
-                response.append(" ").append(nextMedication.getDosage());
-            }
+            response.append(nextMedication.getActivityName());
             response.append(" ");
-            response.append(formatMedicationTimes(nextMedication, true));
+            response.append(formatRoutineTimes(nextMedication, true));
             response.append("। ");
         } else {
             response.append("आज कोई दवाई निर्धारित नहीं है। ");
@@ -570,7 +544,7 @@ public class VoiceService {
     }
 
     private String buildStandardAssistantResponse(LocalDate today,
-            List<Medication> medications,
+            List<Routine> medications,
             List<Note> reminders,
             List<Routine> routines) {
 
@@ -584,14 +558,11 @@ public class VoiceService {
         if (!medications.isEmpty()) {
             response.append("Your medications are: ");
             for (int i = 0; i < Math.min(medications.size(), 3); i++) {
-                Medication medication = medications.get(i);
+                Routine medication = medications.get(i);
                 response.append(i + 1).append(") ")
-                        .append(medication.getName());
-                if (medication.getDosage() != null && !medication.getDosage().isBlank()) {
-                    response.append(" ").append(medication.getDosage());
-                }
+                        .append(medication.getActivityName());
                 response.append(" ")
-                        .append(formatMedicationTimes(medication, false))
+                        .append(formatRoutineTimes(medication, false))
                         .append(". ");
             }
         } else {
@@ -626,56 +597,30 @@ public class VoiceService {
         return response.toString();
     }
 
-    private boolean isMedicationScheduledToday(Medication medication) {
-        if (!medication.isActive()) {
-            return false;
+    private String formatRoutineTimes(Routine routine, boolean dementiaStyle) {
+        if (routine.getScheduledTime() == null) {
+            return dementiaStyle ? "आज लेना है" : "should be taken today";
         }
 
-        List<String> daysOfWeek = medication.getDaysOfWeek();
-        if (daysOfWeek == null || daysOfWeek.isEmpty()) {
-            return true;
-        }
-
-        String today = LocalDate.now().getDayOfWeek().name();
-        return daysOfWeek.stream().anyMatch(day -> day != null && day.equalsIgnoreCase(today));
+        String time = routine.getScheduledTime().format(DateTimeFormatter.ofPattern("h:mm a"));
+        return dementiaStyle ? "को " + time + " पर लेना है" : "at " + time;
     }
 
-    private boolean isRoutineScheduledToday(Routine routine) {
-        if (!routine.isActive()) {
+    private boolean isRoutineUpcomingToday(Routine routine) {
+        if (!routine.isActive() || routine.getScheduledTime() == null) {
             return false;
         }
 
         List<String> daysOfWeek = routine.getDaysOfWeek();
-        if (daysOfWeek == null || daysOfWeek.isEmpty()) {
-            return true;
-        }
+        boolean scheduledToday = daysOfWeek == null || daysOfWeek.isEmpty() ||
+                daysOfWeek.stream().anyMatch(day -> day != null && day.equalsIgnoreCase(LocalDate.now().getDayOfWeek().name()));
 
-        String today = LocalDate.now().getDayOfWeek().name();
-        return daysOfWeek.stream().anyMatch(day -> day != null && day.equalsIgnoreCase(today));
+        if (!scheduledToday) return false;
+
+        return true;
     }
 
-    private LocalTime firstScheduledTimeOrEndOfDay(Medication medication) {
-        if (medication.getScheduledTimes() == null || medication.getScheduledTimes().isEmpty()) {
-            return LocalTime.MAX;
-        }
-        return medication.getScheduledTimes().stream()
-                .min(LocalTime::compareTo)
-                .orElse(LocalTime.MAX);
-    }
 
-    private String formatMedicationTimes(Medication medication, boolean dementiaStyle) {
-        if (medication.getScheduledTimes() == null || medication.getScheduledTimes().isEmpty()) {
-            return dementiaStyle ? "आज लेना है" : "should be taken today";
-        }
-
-        String times = medication.getScheduledTimes().stream()
-                .sorted()
-                .limit(dementiaStyle ? 1 : 3)
-                .map(time -> time.format(DateTimeFormatter.ofPattern("h:mm a")))
-                .collect(Collectors.joining(", "));
-
-        return dementiaStyle ? "को " + times + " पर लेना है" : "at " + times;
-    }
 
     private VoiceResponse generateFinalResponse(String transcription, String context,
             String userType, String mode,
@@ -697,25 +642,11 @@ public class VoiceService {
                 String reviewId = hitlQueueService.addToQueue(
                         userId, userType, transcription, context, confidence, sessionId);
                 
-                String systemPrompt = "You are a caring personal assistant. The user asked: \"" + transcription + "\". " +
-                      "You could not answer because: " + String.join(", ", confidence.getReasons()) + ". " +
-                      "Generate a short (1-2 sentences), empathetic response explicitly in the language the user prefers (Language code/name = " + language + "). " +
-                      "Gently explain why you can't answer right now and explicitly tell them that you are asking their caregiver for help, so they should wait.";
-                
-                String waitMessage = "मैं आपके केयरगिवर को इन्फॉर्म कर रही हूँ, कृपया प्रतीक्षा करें।";
+                String waitMessage = "मैं आपके केयरगिवर को इन्फॉर्म कर रही हूँ। वे जल्द ही आपसे संपर्क करेंगे।";
                 if (language != null && (language.equalsIgnoreCase("en") || language.equalsIgnoreCase("English"))) {
-                    waitMessage = "I am informing your caregiver, please wait.";
+                    waitMessage = "I am informing your caregiver. They will contact you shortly.";
                 } else if (language != null && (language.equalsIgnoreCase("mr") || language.equalsIgnoreCase("Marathi"))) {
-                    waitMessage = "मी तुमच्या केअरगिव्हरला माहिती देत आहे, कृपया प्रतीक्षा करा.";
-                }
-
-                try {
-                    String llmMsg = llmService.callLLM(systemPrompt, mode, language);
-                    if (llmMsg != null && !llmMsg.isBlank()) {
-                        waitMessage = llmMsg.trim();
-                    }
-                } catch (Exception e) {
-                    log.error("Failed to generate dynamic wait message. Using fallback.", e);
+                    waitMessage = "मी तुमच्या केअरगिव्हरला माहिती देत आहे. ते लवकरच तुमच्याशी संपर्क साधतील.";
                 }
                 
                 String audioUrl = null;
@@ -869,7 +800,11 @@ public class VoiceService {
         jsonBody.addProperty("punctuate", true);
 
         if (language != null && !language.isEmpty() && !language.equals("auto")) {
-            jsonBody.addProperty("language_code", language);
+            String mappedLang = language.toLowerCase();
+            if (mappedLang.equals("english")) mappedLang = "en";
+            else if (mappedLang.equals("hindi")) mappedLang = "hi";
+            else if (mappedLang.equals("marathi")) mappedLang = "mr";
+            jsonBody.addProperty("language_code", mappedLang);
         } else {
             jsonBody.addProperty("language_detection", true);
         }
@@ -908,6 +843,39 @@ public class VoiceService {
         try {
             String prompt = buildPrompt(transcription, context, userType, language);
             String llmResponse = llmService.callLLM(prompt, mode, language);
+            
+            if (llmResponse != null && llmResponse.contains("UNKNOWN_QUERY")) {
+                ConfidenceScore fallbackScore = ConfidenceScore.builder()
+                        .score(0.0)
+                        .highConfidence(false)
+                        .decision(ConfidenceScore.Decision.HITL_REVIEW)
+                        .intentType("UNKNOWN")
+                        .reasons(List.of("LLM returned UNKNOWN_QUERY fallback"))
+                        .build();
+                        
+                String reviewId = hitlQueueService.addToQueue(
+                        userId, userType, transcription, context, fallbackScore, sessionId);
+                        
+                String waitMessage = "मैं आपके केयरगिवर को इन्फॉर्म कर रही हूँ। वे जल्द ही आपसे संपर्क करेंगे।";
+                if (language != null && (language.equalsIgnoreCase("en") || language.equalsIgnoreCase("English"))) {
+                    waitMessage = "I am informing your caregiver. They will contact you shortly.";
+                } else if (language != null && (language.equalsIgnoreCase("mr") || language.equalsIgnoreCase("Marathi"))) {
+                    waitMessage = "मी तुमच्या केअरगिव्हरला माहिती देत आहे. ते लवकरच तुमच्याशी संपर्क साधतील.";
+                }
+                
+                String audioUrl = null;
+                try {
+                    audioUrl = ttsService.textToSpeech(waitMessage, userId);
+                } catch (Exception ttsEx) {
+                    log.error("Failed to generate TTS for fallback message.", ttsEx);
+                }
+                
+                VoiceResponse resp = VoiceResponse.reviewRequired(sessionId, transcription, reviewId, 300);
+                resp.setTextResponse(waitMessage);
+                resp.setAudioUrl(audioUrl);
+                return resp;
+            }
+            
             String audioUrl = ttsService.textToSpeech(llmResponse, userId);
             return VoiceResponse.success(sessionId, transcription, llmResponse, audioUrl);
         } catch (Exception e) {
@@ -995,6 +963,8 @@ public class VoiceService {
         if (context != null && !context.isEmpty()) {
             prompt.append("Patient context:\n").append(context).append("\n\n");
         }
+
+        prompt.append("If you do not know the answer, or if the user's question is unclear or makes no sense, you MUST reply with exactly: UNKNOWN_QUERY\n\n");
 
         prompt.append("Patient asked: \"").append(transcription).append("\"\n\nYour response:");
         return prompt.toString();

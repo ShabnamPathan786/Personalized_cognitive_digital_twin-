@@ -56,6 +56,16 @@ export const hitlApi = {
     },
 
     /**
+     * Resolve item offline (caregiver contacted patient directly)
+     * @param {string} itemId
+     * @returns {Promise}
+     */
+    resolveOffline: async (itemId) => {
+        const response = await axios.post(`/hitl/queue/${itemId}/resolve-offline`);
+        return response.data;
+    },
+
+    /**
      * Reject item (can't answer)
      * @param {string} itemId
      * @param {string} reason
