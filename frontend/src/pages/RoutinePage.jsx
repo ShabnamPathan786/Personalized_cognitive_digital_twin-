@@ -201,6 +201,43 @@ const RoutinePage = () => {
         );
     };
 
+    const getTodaySchedulerLog = (routine, status) => {
+        if (!routine.logs || routine.logs.length === 0) return null;
+        const today = new Date().toDateString();
+
+        return routine.logs
+            .filter(log =>
+                log.status === status &&
+                log.scheduledDateTime &&
+                new Date(log.scheduledDateTime).toDateString() === today
+            )
+            .sort((a, b) => new Date(b.scheduledDateTime) - new Date(a.scheduledDateTime))[0] || null;
+    };
+
+    const getRoutineNotificationStatus = (routine, isToday) => {
+        if (!isToday || isCompletedToday(routine)) return null;
+
+        const missedLog = getTodaySchedulerLog(routine, 'MISSED');
+        if (missedLog) {
+            return {
+                type: 'alert',
+                text: 'Alert sent to user and caregiver for missed routine',
+                className: 'bg-red-50 text-red-700 border-red-200'
+            };
+        }
+
+        const reminderLog = getTodaySchedulerLog(routine, 'PENDING');
+        if (reminderLog?.notes === 'Reminder sent by scheduler') {
+            return {
+                type: 'reminder',
+                text: 'Reminder sent to user',
+                className: 'bg-blue-50 text-blue-700 border-blue-200'
+            };
+        }
+
+        return null;
+    };
+
     return (
         <div className="min-h-screen bg-gradient-to-br from-teal-50 to-emerald-100">
             {/* Header */}
@@ -314,6 +351,7 @@ const RoutinePage = () => {
                             {displayRoutines.map((routine, index) => {
                                 const completed = isCompletedToday(routine);
                                 const isToday = new Date().toLocaleDateString('en-US', { weekday: 'long' }) === selectedDay;
+                                const notificationStatus = getRoutineNotificationStatus(routine, isToday);
                                 
                                 return (
                                     <div key={routine.id} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
@@ -342,6 +380,12 @@ const RoutinePage = () => {
                                             
                                             {routine.description && (
                                                 <p className="text-sm text-gray-600 mb-4 line-clamp-2">{routine.description}</p>
+                                            )}
+
+                                            {notificationStatus && (
+                                                <div className={`mb-4 rounded-xl border px-3 py-2 text-xs font-bold ${notificationStatus.className}`}>
+                                                    {notificationStatus.text}
+                                                </div>
                                             )}
                                             
                                             <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-50">

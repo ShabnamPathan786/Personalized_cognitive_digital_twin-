@@ -83,19 +83,7 @@ public class HITLQueueService {
         item.setConfidenceReasons(confidence.getReasons());
         item.setIntentType(confidence.getIntentType());
 
-        // Set priority
-        if (confidence.isEmergency()) {
-            item.setPriority(HITLQueueItem.PriorityLevel.CRITICAL);
-            item.setPriorityReason("Emergency keywords detected");
-        } else if ("DEMENTIA_PATIENT".equals(userType)) {
-            item.setPriority(HITLQueueItem.PriorityLevel.HIGH);
-            item.setPriorityReason("Dementia patient");
-        } else if (confidence.getScore() < 30) {
-            item.setPriority(HITLQueueItem.PriorityLevel.MEDIUM);
-            item.setPriorityReason("Very low confidence");
-        } else {
-            item.setPriority(HITLQueueItem.PriorityLevel.LOW);
-        }
+        // Priority assignment removed per user request
 
         item.setStatus(HITLQueueItem.QueueStatus.PENDING);
         item.setCreatedAt(LocalDateTime.now());
@@ -119,7 +107,7 @@ public class HITLQueueService {
         // Notify reviewers
         notifyReviewers(saved);
 
-        log.info("Added to HITL queue with ID: {}, Priority: {}", saved.getId(), saved.getPriority());
+        log.info("Added to HITL queue with ID: {}", saved.getId());
 
         return saved.getId();
     }
@@ -134,7 +122,6 @@ public class HITLQueueService {
                 "userFullName", item.getUserFullName(),
                 "userType", item.getUserType(),
                 "query", item.getQuery(),
-                "priority", item.getPriority(),
                 "createdAt", item.getCreatedAt().toString(),
                 "confidenceScore", item.getConfidenceScore(),
                 "reasons", item.getConfidenceReasons()));
@@ -186,7 +173,7 @@ public class HITLQueueService {
         }
 
         // 3. Return only queue items originating from these linked patients
-        return queueRepository.findByStatusAndUserIdInOrderByPriorityAscCreatedAtAsc(
+        return queueRepository.findByStatusAndUserIdInOrderByCreatedAtAsc(
                 HITLQueueItem.QueueStatus.PENDING, patientIds);
     }
 
@@ -285,7 +272,19 @@ public class HITLQueueService {
             throw new RuntimeException("Not assigned to this reviewer");
         }
 
-        item.setReviewedResponse("[RESOLVED OFFLINE BY CAREGIVER]");
+        String resolvedMessage = "DEMENTIA_PATIENT".equals(item.getUserType()) 
+                ? "आपकी समस्या का समाधान हो गया है। क्या आपको किसी और मदद की आवश्यकता है?" 
+                : "Your problem has been resolved. Do you need any help?";
+        
+        String audioUrl = null;
+        try {
+            audioUrl = ttsService.textToSpeech(resolvedMessage, item.getUserId());
+        } catch (Exception e) {
+            log.warn("TTS failed for offline resolution message, sending text-only: {}", e.getMessage());
+        }
+
+        item.setReviewedResponse(resolvedMessage);
+        item.setReviewedResponseAudioUrl(audioUrl);
         item.setReviewerNotes("Caregiver contacted patient directly");
         item.setStatus(HITLQueueItem.QueueStatus.REVIEWED);
         item.setReviewedAt(LocalDateTime.now());
@@ -298,6 +297,31 @@ public class HITLQueueService {
         HITLQueueItem saved = queueRepository.save(item);
 
         saveToNotes(item);
+
+        String username = item.getUsername();
+        if (username != null && !username.isBlank()) {
+            webSocketService.sendVoiceResponse(
+                    username,
+                    VoiceResponse.builder()
+                            .status(VoiceResponse.ResponseStatus.REVIEW_COMPLETED)
+                            .interactionId(item.getSessionId())
+                            .transcription(item.getQuery())
+                            .textResponse(resolvedMessage)
+                            .audioUrl(audioUrl)
+                            .timestamp(LocalDateTime.now())
+                            .build());
+        } else if (item.getSessionId() != null) {
+            webSocketService.sendToTopic(
+                    "/topic/voice.response/" + item.getSessionId(),
+                    VoiceResponse.builder()
+                            .status(VoiceResponse.ResponseStatus.REVIEW_COMPLETED)
+                            .interactionId(item.getSessionId())
+                            .transcription(item.getQuery())
+                            .textResponse(resolvedMessage)
+                            .audioUrl(audioUrl)
+                            .timestamp(LocalDateTime.now())
+                            .build());
+        }
 
         log.info("Item {} resolved offline by caregiver {}", itemId, reviewerId);
 

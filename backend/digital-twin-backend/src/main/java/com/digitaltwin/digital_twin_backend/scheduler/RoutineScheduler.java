@@ -17,6 +17,7 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.Arrays;
 import java.util.List;
 
 @Component
@@ -24,6 +25,7 @@ import java.util.List;
 public class RoutineScheduler {
 
     private static final Logger logger = LoggerFactory.getLogger(RoutineScheduler.class);
+    private static final int MISSED_ROUTINE_GRACE_MINUTES = 3;
 
     private final RoutineRepository routineRepository;
     private final RoutineService routineService;
@@ -33,8 +35,8 @@ public class RoutineScheduler {
 
     /**
      * Runs every 60 seconds.
-     * 1. Remind patient if an important routine is due in next 15 minutes
-     * 2. Alert caregivers if an important routine was missed (15 minutes after start time)
+     * 1. Remind patient before a scheduled routine
+     * 2. Alert caregivers if a routine was not marked done within the grace period
      */
     @Scheduled(fixedRate = 60000)
     public void checkRoutines() {
@@ -45,15 +47,11 @@ public class RoutineScheduler {
             return;
         }
 
-        LocalTime now = LocalTime.now().withSecond(0).withNano(0);
-        String todayDayOfWeek = LocalDate.now().getDayOfWeek().name();
+        LocalDateTime now = LocalDateTime.now().withSecond(0).withNano(0);
+        List<LocalDate> candidateDates = Arrays.asList(now.toLocalDate(), now.toLocalDate().minusDays(1));
 
         for (Routine routine : activeRoutines) {
             if (routine.getScheduledTime() == null) {
-                continue;
-            }
-
-            if (!isScheduledToday(routine, todayDayOfWeek)) {
                 continue;
             }
 
@@ -62,30 +60,35 @@ public class RoutineScheduler {
                 continue;
             }
 
-            // PER USER REQUEST: Limit reminder and missed alerts to MEDICATION and APPOINTMENTS only for now.
-            if (routine.getCategory() != Routine.ActivityCategory.MEDICATION && 
-                routine.getCategory() != Routine.ActivityCategory.APPOINTMENTS) {
-                continue;
-            }
+            for (LocalDate scheduledDate : candidateDates) {
+                if (!isScheduledOnDate(routine, scheduledDate)) {
+                    continue;
+                }
 
-            LocalTime scheduledTime = routine.getScheduledTime();
-            checkReminder(routine, scheduledTime, now);
-            checkMissed(routine, scheduledTime, now);
+                LocalDateTime scheduledDateTime = LocalDateTime.of(scheduledDate, routine.getScheduledTime());
+                checkReminder(routine, scheduledDateTime, now);
+                checkMissed(routine, scheduledDateTime, now);
+            }
         }
     }
 
-    private void checkReminder(Routine routine, LocalTime scheduledTime, LocalTime now) {
+    private void checkReminder(Routine routine, LocalDateTime scheduledDateTime, LocalDateTime now) {
         int reminderBefore = routine.getReminderMinutesBefore(); // default 15
-        LocalTime reminderTime = scheduledTime.minusMinutes(reminderBefore);
+        LocalDateTime reminderTime = scheduledDateTime.minusMinutes(reminderBefore);
 
-        // Check if now is within the reminder window (±1 minute tolerance)
-        if (isWithinOneMinute(now, reminderTime)) {
+        if (!now.isBefore(reminderTime) && now.isBefore(scheduledDateTime)) {
             // Don't remind if already completed
-            if (isCompletedToday(routine, scheduledTime))
+            if (isCompletedForSchedule(routine, scheduledDateTime))
+                return;
+
+            // Don't send the same reminder every scheduler tick
+            if (reminderAlreadySent(routine, scheduledDateTime))
                 return;
 
             logger.info("📅 Sending routine reminder — Activity: {}, Patient: {}, Due at: {}",
-                    routine.getActivityName(), routine.getUserId(), scheduledTime);
+                    routine.getActivityName(), routine.getUserId(), scheduledDateTime.toLocalTime());
+
+            routineService.logRoutineReminderSent(routine.getId(), scheduledDateTime);
 
             userRepository.findById(routine.getUserId()).ifPresent(patient -> {
                 // SMS reminder to patient
@@ -93,7 +96,7 @@ public class RoutineScheduler {
                     notificationService.sendRoutineReminder(
                             patient.getPhoneNumber(),
                             routine.getActivityName(),
-                            scheduledTime.toString());
+                            scheduledDateTime.toLocalTime().toString());
                 }
 
                 // Email reminder to patient
@@ -102,33 +105,63 @@ public class RoutineScheduler {
                             patient.getEmail(),
                             patient.getFullName(),
                             routine.getActivityName(),
-                            scheduledTime.toString());
+                            scheduledDateTime.toLocalTime().toString());
+                }
+
+                // SMS reminder to caregiver(s)
+                if (patient.getCaregiverIds() != null && !patient.getCaregiverIds().isEmpty()) {
+                    for (String caregiverId : patient.getCaregiverIds()) {
+                        userRepository.findById(caregiverId).ifPresent(caregiver -> {
+                            if (caregiver.getPhoneNumber() != null && !caregiver.getPhoneNumber().isBlank()) {
+                                notificationService.sendSMS(
+                                        caregiver.getPhoneNumber(),
+                                        String.format("Reminder: Patient %s has a routine '%s' scheduled at %s.", 
+                                                patient.getFullName(), routine.getActivityName(), scheduledDateTime.toLocalTime()));
+                            }
+                        });
+                    }
+                }
+                
+                // SMS reminder to emergency contacts as well, if any
+                if (patient.getEmergencyContacts() != null && !patient.getEmergencyContacts().isEmpty()) {
+                    for (User.EmergencyContact contact : patient.getEmergencyContacts()) {
+                        if (contact.getPhoneNumber() != null && !contact.getPhoneNumber().isBlank()) {
+                            notificationService.sendSMS(
+                                    contact.getPhoneNumber(),
+                                    String.format("Reminder: Patient %s has a routine '%s' scheduled at %s.", 
+                                            patient.getFullName(), routine.getActivityName(), scheduledDateTime.toLocalTime()));
+                        }
+                    }
                 }
             });
         }
     }
 
-    private void checkMissed(Routine routine, LocalTime scheduledTime, LocalTime now) {
-        // Checking for missed 15 minutes after the scheduled start time
-        LocalTime missedThreshold = scheduledTime.plusMinutes(15);
-        if (isWithinOneMinute(now, missedThreshold)) {
+    private void checkMissed(Routine routine, LocalDateTime scheduledDateTime, LocalDateTime now) {
+        // Give the patient a short grace period after the scheduled start time.
+        LocalDateTime missedThreshold = scheduledDateTime.plusMinutes(MISSED_ROUTINE_GRACE_MINUTES);
+        if (!missedThreshold.toLocalDate().equals(now.toLocalDate())) {
+            return;
+        }
+
+        if (!now.isBefore(missedThreshold)) {
             // Already taken/completed — no alert needed
-            if (isCompletedToday(routine, scheduledTime))
+            if (isCompletedForSchedule(routine, scheduledDateTime))
                 return;
 
             // Already alerted for this — avoid duplicate alerts
-            if (alertAlreadyCreated(routine, scheduledTime))
+            if (alertAlreadyCreated(routine, scheduledDateTime))
                 return;
 
             logger.warn("🚨 Missed routine detected — {}, Patient: {}, Was due at: {}",
-                    routine.getActivityName(), routine.getUserId(), scheduledTime);
+                    routine.getActivityName(), routine.getUserId(), scheduledDateTime.toLocalTime());
 
             // Log it internally as MISSED
-            routineService.logRoutineMissed(routine.getId());
+            routineService.logRoutineMissed(routine.getId(), scheduledDateTime);
 
             userRepository.findById(routine.getUserId()).ifPresent(patient -> {
                 // Create emergency alert
-                createMissedAlert(patient, routine, scheduledTime);
+                createMissedAlert(patient, routine, scheduledDateTime.toLocalTime());
                 
                 if (patient.getEmail() != null && !patient.getEmail().isBlank()) {
                     notificationService.sendMissedRoutineEmail(
@@ -136,7 +169,7 @@ public class RoutineScheduler {
                             patient.getFullName(),
                             patient.getFullName(),
                             routine.getActivityName(),
-                            scheduledTime.toString()
+                            scheduledDateTime.toLocalTime().toString()
                     );
                 }
                 
@@ -144,12 +177,12 @@ public class RoutineScheduler {
                     notificationService.sendSMS(
                             patient.getPhoneNumber(),
                             String.format("🚨 You missed an important routine: %s scheduled at %s. Please complete it!",
-                                    routine.getActivityName(), scheduledTime)
+                                    routine.getActivityName(), scheduledDateTime.toLocalTime())
                     );
                 }
                 
                 // Notify all caregivers
-                notifyCaregivers(patient, routine, scheduledTime);
+                notifyCaregivers(patient, routine, scheduledDateTime.toLocalTime());
             });
         }
     }
@@ -200,27 +233,38 @@ public class RoutineScheduler {
         }
     }
 
-    private boolean isScheduledToday(Routine routine, String todayDayOfWeek) {
+    private boolean isScheduledOnDate(Routine routine, LocalDate date) {
         if (routine.getDaysOfWeek() == null || routine.getDaysOfWeek().isEmpty()) {
             return true; // No restriction = daily
         }
+        String dayOfWeek = date.getDayOfWeek().name();
         return routine.getDaysOfWeek().stream()
-                .anyMatch(day -> day.equalsIgnoreCase(todayDayOfWeek));
+                .anyMatch(day -> day.equalsIgnoreCase(dayOfWeek));
     }
 
-    private boolean isCompletedToday(Routine routine, LocalTime scheduledTime) {
+    private boolean isCompletedForSchedule(Routine routine, LocalDateTime scheduledDateTime) {
         if (routine.getLogs() == null || routine.getLogs().isEmpty())
             return false;
 
-        LocalDate today = LocalDate.now();
         return routine.getLogs().stream().anyMatch(log -> 
                 (log.getStatus() == Routine.RoutineStatus.COMPLETED || log.getStatus() == Routine.RoutineStatus.SKIPPED)
                 && log.getScheduledDateTime() != null
-                && log.getScheduledDateTime().toLocalDate().equals(today));
+                && log.getScheduledDateTime().toLocalDate().equals(scheduledDateTime.toLocalDate()));
     }
 
-    private boolean alertAlreadyCreated(Routine routine, LocalTime scheduledTime) {
-        LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
+    private boolean reminderAlreadySent(Routine routine, LocalDateTime scheduledDateTime) {
+        if (routine.getLogs() == null || routine.getLogs().isEmpty())
+            return false;
+
+        return routine.getLogs().stream().anyMatch(log ->
+                log.getStatus() == Routine.RoutineStatus.PENDING
+                && "Reminder sent by scheduler".equals(log.getNotes())
+                && log.getScheduledDateTime() != null
+                && log.getScheduledDateTime().equals(scheduledDateTime));
+    }
+
+    private boolean alertAlreadyCreated(Routine routine, LocalDateTime scheduledDateTime) {
+        LocalDateTime startOfDay = scheduledDateTime.toLocalDate().atStartOfDay();
         LocalDateTime endOfDay = startOfDay.plusDays(1);
 
         List<EmergencyAlert> existing = emergencyAlertRepository
@@ -232,11 +276,6 @@ public class RoutineScheduler {
 
         return existing.stream().anyMatch(alert -> alert.getMessage() != null &&
                 alert.getMessage().contains(routine.getActivityName()) &&
-                alert.getMessage().contains(scheduledTime.toString()));
-    }
-
-    private boolean isWithinOneMinute(LocalTime now, LocalTime target) {
-        long diff = Math.abs(now.toSecondOfDay() - target.toSecondOfDay());
-        return diff <= 60;
+                alert.getMessage().contains(scheduledDateTime.toLocalTime().toString()));
     }
 }

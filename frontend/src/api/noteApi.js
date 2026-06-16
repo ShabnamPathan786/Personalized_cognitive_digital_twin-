@@ -61,9 +61,66 @@ export const noteApi = {
         return response.data;
     },
 
+    // Toggle dashboard
+    toggleDashboard: async (id) => {
+        const response = await axios.patch(`/notes/${id}/dashboard`);
+        return response.data;
+    },
+
     // Delete note
     deleteNote: async (id) => {
         const response = await axios.delete(`/notes/${id}`);
         return response.data;
     },
+
+    // Seed dummy data
+    seedDummyData: async () => {
+        const dummyNotes = [
+            {
+                title: 'Medical Alert: Allergies',
+                content: 'Allergic to Penicillin and Sulfa drugs. Blood type is O-positive. Keep this information handy during any medical visits.',
+                type: 'DOCUMENT',
+                priority: 'HIGH',
+                category: 'Medical',
+                color: '#FCE7F3'
+            },
+            {
+                title: 'Family Contacts',
+                content: 'Daughter Sarah: (555) 123-4567\nSon Michael: (555) 987-6543\nDr. Smith (Neurologist): (555) 555-0199',
+                type: 'PERSONAL',
+                priority: 'URGENT',
+                category: 'Contacts',
+                color: '#FEF3C7'
+            },
+            {
+                title: 'Favorite Memories',
+                content: 'Summer vacations at the lake house in Michigan. Grandson Leo was born June 15, 2018. He loves fire trucks and dogs.',
+                type: 'PERSONAL',
+                priority: 'LOW',
+                category: 'Memories',
+                color: '#DBEAFE'
+            },
+            {
+                title: 'House Key Location',
+                content: 'The spare house key is hidden under the fake rock next to the front porch steps. The backdoor needs to be locked every night before bed.',
+                type: 'PERSONAL',
+                priority: 'MEDIUM',
+                category: 'Home',
+                color: '#D1FAE5'
+            },
+            {
+                title: 'Weekly Grocery List Staples',
+                content: '- Whole wheat bread\n- Skim milk\n- Bananas\n- Oatmeal\n- Decaf coffee\n- Chicken breast',
+                type: 'OTHER',
+                priority: 'LOW',
+                category: 'Shopping',
+                color: '#FED7AA'
+            }
+        ];
+
+        for (const note of dummyNotes) {
+            await axios.post('/notes', note);
+        }
+        return { success: true };
+    }
 };

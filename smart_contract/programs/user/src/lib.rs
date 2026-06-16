@@ -1,4 +1,3 @@
-
 use anchor_lang::prelude::*;
 declare_id!("ATsyGivpSuNFVehNN9baLzRFCqSfC78uucEz5Hrx7WWc");
 
@@ -10,17 +9,20 @@ pub mod user {
         ctx: Context<CreateProfile>,
         name: String,
         email: String,
-        phone: String,
+        yourphone: String,
+        caregiverphone: String,
     ) -> Result<()> {
         require!(name.len() <= 50, AppError::NameTooLong);
         require!(email.len() <= 50, AppError::EmailTooLong);
-        require!(phone.len() <= 20, AppError::PhoneTooLong);
+        require!(yourphone.len() <= 20, AppError::PhoneTooLong);
+        require!(caregiverphone.len() <= 20, AppError::PhoneTooLong);
 
         let profile = &mut ctx.accounts.profile;
         profile.owner = ctx.accounts.user.key();
         profile.name = name;
         profile.email = email;
-        profile.phone = phone;
+        profile.yourphone = yourphone;
+        profile.caregiverphone = caregiverphone;
         Ok(())
     }
 
@@ -28,16 +30,19 @@ pub mod user {
         ctx: Context<UpdateProfile>,
         name: String,
         email: String,
-        phone: String,
+        yourphone: String,
+        caregiverphone: String,
     ) -> Result<()> {
         require!(name.len() <= 50, AppError::NameTooLong);
         require!(email.len() <= 50, AppError::EmailTooLong);
-        require!(phone.len() <= 20, AppError::PhoneTooLong);
+        require!(yourphone.len() <= 20, AppError::PhoneTooLong);
+        require!(caregiverphone.len() <= 20, AppError::PhoneTooLong);
 
         let profile = &mut ctx.accounts.profile;
         profile.name = name;
         profile.email = email;
-        profile.phone = phone;
+        profile.yourphone = yourphone;
+        profile.caregiverphone = caregiverphone;
         Ok(())
     }
 }
@@ -74,10 +79,11 @@ pub struct UpdateProfile<'info> {
 
 #[account]
 pub struct UserProfile {
-    pub owner: Pubkey,  // 32
-    pub name: String,   // 4 + 50
-    pub email: String,  // 4 + 50
-    pub phone: String,  // 4 + 20
+    pub owner: Pubkey,        // 32
+    pub name: String,         // 4 + 50
+    pub email: String,        // 4 + 50
+    pub yourphone: String,    // 4 + 20
+    pub caregiverphone: String // 4 + 20
 }
 
 impl UserProfile {
@@ -85,7 +91,8 @@ impl UserProfile {
         + 32                      // owner
         + 4 + 50                  // name
         + 4 + 50                  // email
-        + 4 + 20;                 // phone
+        + 4 + 20                  // yourphone
+        + 4 + 20;                 // caregiverphone
 }
 
 #[error_code]

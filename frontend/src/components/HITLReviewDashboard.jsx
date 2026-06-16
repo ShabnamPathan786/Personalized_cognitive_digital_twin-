@@ -16,7 +16,6 @@ const HITLReviewDashboard = () => {
     const [rating, setRating] = useState(5);
     const [aiSuggestion, setAiSuggestion] = useState('');
     const [generatingSuggestion, setGeneratingSuggestion] = useState(false);
-    const [filter, setFilter] = useState('ALL');
     const [stats, setStats] = useState(null);
 
     // ✅ FIX: Track when reviewer opened the item — not when they clicked submit
@@ -25,9 +24,7 @@ const HITLReviewDashboard = () => {
     const { lastMessage } = useWebSocket('/topic/hitl');
 
     useEffect(() => {
-        loadQueue();
-        loadStats();
-    }, [filter]);
+    }, []);
 
     useEffect(() => {
         if (lastMessage) {
@@ -53,11 +50,7 @@ const HITLReviewDashboard = () => {
         try {
             const response = await hitlApi.getPendingQueue();
             if (response.success) {
-                let filteredQueue = response.data || [];
-                if (filter !== 'ALL') {
-                    filteredQueue = filteredQueue.filter(item => item.priority === filter);
-                }
-                setQueue(filteredQueue);
+                setQueue(response.data || []);
             }
         } catch (err) {
             setError('Failed to load queue');
@@ -135,15 +128,6 @@ const HITLReviewDashboard = () => {
         }
     };
 
-    const getPriorityColor = (priority) => {
-        const colors = {
-            CRITICAL: 'bg-red-600',
-            HIGH: 'bg-orange-600',
-            MEDIUM: 'bg-yellow-600',
-            LOW: 'bg-blue-600'
-        };
-        return colors[priority] || 'bg-gray-600';
-    };
 
     const getTimeAgo = (dateString) => {
         const diff = Math.floor((new Date() - new Date(dateString)) / 60000);
@@ -217,25 +201,11 @@ const HITLReviewDashboard = () => {
                 <div className="flex gap-6">
                     {/* Queue Sidebar */}
                     <div className="w-1/3 bg-white rounded-lg shadow-lg overflow-hidden">
-                        <div className="p-4 border-b">
-                            <h2 className="font-bold mb-3">Filter by Priority</h2>
-                            <div className="flex flex-wrap gap-2">
-                                {['ALL', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map(p => (
-                                    <button
-                                        key={p}
-                                        onClick={() => setFilter(p)}
-                                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${filter === p
-                                                ? 'bg-purple-600 text-white'
-                                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                            }`}
-                                    >
-                                        {p}
-                                    </button>
-                                ))}
-                            </div>
+                        <div className="p-4 border-b bg-gray-50">
+                            <h2 className="font-bold text-gray-700">Pending Patients</h2>
                         </div>
 
-                        <div className="divide-y max-h-[600px] overflow-y-auto">
+                        <div className="max-h-[600px] overflow-y-auto">
                             {loading ? (
                                 <div className="p-8 text-center">
                                     <div className="animate-spin rounded-full h-8 w-8 border-2 border-purple-600 border-t-transparent mx-auto"></div>
@@ -248,40 +218,51 @@ const HITLReviewDashboard = () => {
                                     <p className="text-sm mt-1">All caught up!</p>
                                 </div>
                             ) : (
-                                queue.map(item => (
-                                    <div
-                                        key={item.id}
-                                        onClick={() => handleSelectItem(item)}
-                                        className={`p-4 cursor-pointer transition hover:bg-gray-50 ${currentItem?.id === item.id
-                                                ? 'bg-purple-50 border-l-4 border-purple-600'
-                                                : ''
-                                            }`}
-                                    >
-                                        <div className="flex items-start justify-between mb-2">
+                                Object.values(queue.reduce((acc, item) => {
+                                    if (!acc[item.userId]) {
+                                        acc[item.userId] = {
+                                            userId: item.userId,
+                                            userFullName: item.userFullName,
+                                            userType: item.userType,
+                                            items: []
+                                        };
+                                    }
+                                    acc[item.userId].items.push(item);
+                                    return acc;
+                                }, {})).map(patient => (
+                                    <div key={patient.userId} className="border-b last:border-b-0 border-gray-200">
+                                        <div className="bg-purple-100 px-4 py-2 flex items-center justify-between sticky top-0 z-10 shadow-sm border-y border-purple-200">
                                             <div className="flex items-center gap-2">
-                                                <span className={`w-2 h-2 rounded-full ${getPriorityColor(item.priority)}`}></span>
-                                                <span className="font-medium text-sm">{item.userFullName}</span>
-                                                <span className="text-xs text-gray-500">({item.userType})</span>
+                                                <span className="text-lg">👤</span>
+                                                <span className="font-bold text-purple-900">{patient.userFullName}</span>
                                             </div>
-                                            <span className="text-xs text-gray-400">{getTimeAgo(item.createdAt)}</span>
+                                            <span className="text-xs font-semibold text-purple-700 uppercase tracking-wider">{patient.userType}</span>
                                         </div>
-
-                                        <p className="text-sm text-gray-800 mb-2 line-clamp-2">"{item.query}"</p>
-
-                                        <div className="flex items-center gap-2 text-xs">
-                                            <span className={`px-2 py-0.5 rounded-full text-white ${getPriorityColor(item.priority)}`}>
-                                                {item.priority}
-                                            </span>
-                                            <span className="bg-gray-100 px-2 py-0.5 rounded-full">
-                                                Score: {Math.round(item.confidenceScore)}%
-                                            </span>
+                                        <div className="divide-y divide-gray-100">
+                                            {patient.items.map(item => (
+                                                <div
+                                                    key={item.id}
+                                                    onClick={() => handleSelectItem(item)}
+                                                    className={`p-4 cursor-pointer transition hover:bg-purple-50 ${currentItem?.id === item.id
+                                                            ? 'bg-purple-50 border-l-4 border-purple-600'
+                                                            : 'border-l-4 border-transparent'
+                                                        }`}
+                                                >
+                                                    <div className="flex justify-between items-start mb-2">
+                                                        <span className="text-xs text-gray-400 font-medium">{getTimeAgo(item.createdAt)}</span>
+                                                        <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-xs font-medium">
+                                                            Score: {Math.round(item.confidenceScore)}%
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-sm text-gray-800 mb-2 font-medium">"{item.query}"</p>
+                                                    {item.confidenceReasons?.length > 0 && (
+                                                        <div className="mt-1 text-xs text-gray-500 italic">
+                                                            ⚠️ {item.confidenceReasons[0]}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))}
                                         </div>
-
-                                        {item.confidenceReasons?.length > 0 && (
-                                            <div className="mt-2 text-xs text-gray-500">
-                                                {item.confidenceReasons[0]}
-                                            </div>
-                                        )}
                                     </div>
                                 ))
                             )}
@@ -301,8 +282,8 @@ const HITLReviewDashboard = () => {
                                             <p className="font-medium">{currentItem.userFullName}</p>
                                             <p className="text-sm text-gray-600">{currentItem.userEmail}</p>
                                         </div>
-                                        <span className={`px-3 py-1 rounded-full text-xs text-white ${getPriorityColor(currentItem.priority)}`}>
-                                            {currentItem.priority}
+                                        <span className="bg-gray-200 px-3 py-1 rounded-full text-xs text-gray-700 font-medium">
+                                            Score: {Math.round(currentItem.confidenceScore)}%
                                         </span>
                                     </div>
                                     <p className="text-xs text-gray-500">User Type: {currentItem.userType}</p>
@@ -351,7 +332,7 @@ const HITLReviewDashboard = () => {
                                             disabled={submitting}
                                             className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-bold shadow-md transition disabled:bg-gray-400"
                                         >
-                                            {submitting ? 'Resolving...' : '✓ Mark as Resolved (Contacted Patient)'}
+                                            {submitting ? 'Resolving...' : '✓ Problem Resolved'}
                                         </button>
                                         <button
                                             onClick={() => handleReject(currentItem.id, 'Cannot answer')}
@@ -360,7 +341,7 @@ const HITLReviewDashboard = () => {
                                             Reject
                                         </button>
                                     </div>
-                                    <p className="text-xs text-green-600 mt-3">Clicking resolved will clear this item without speaking back to the patient via the voice assistant.</p>
+                                    <p className="text-xs text-green-600 mt-3">Clicking this will clear the item and the Voice Assistant will ask the patient if they need any more help.</p>
                                 </div>
                             </div>
                         ) : (

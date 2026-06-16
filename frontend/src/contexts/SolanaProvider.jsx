@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, createContext, useContext } from "react";
 import {
   ConnectionProvider,
   WalletProvider
@@ -16,8 +16,12 @@ import { clusterApiUrl } from "@solana/web3.js";
 
 import "@solana/wallet-adapter-react-ui/styles.css";
 
+export const NetworkContext = createContext();
+
+export const useNetwork = () => useContext(NetworkContext);
+
 export default function SolanaProvider({ children }) {
-  const [network, setNetwork] = useState("devnet");
+  const [network, setNetwork] = useState("localnet");
 
   const endpoint = useMemo(() => {
     if (network === "localnet") return "http://127.0.0.1:8899";
@@ -33,24 +37,14 @@ export default function SolanaProvider({ children }) {
   );
 
   return (
-    <ConnectionProvider endpoint={endpoint}>
-      <WalletProvider wallets={wallets} autoConnect>
-        <WalletModalProvider>
-          {children}
-
-          {/* simple global network switch */}
-          <div className="fixed bottom-4 right-4 bg-white p-2 rounded shadow">
-            <select
-              value={network}
-              onChange={(e) => setNetwork(e.target.value)}
-            >
-              <option value="devnet">Devnet</option>
-              <option value="localnet">Localnet</option>
-            </select>
-          </div>
-
-        </WalletModalProvider>
-      </WalletProvider>
-    </ConnectionProvider>
+    <NetworkContext.Provider value={{ network, setNetwork }}>
+      <ConnectionProvider endpoint={endpoint}>
+        <WalletProvider wallets={wallets} autoConnect>
+          <WalletModalProvider>
+            {children}
+          </WalletModalProvider>
+        </WalletProvider>
+      </ConnectionProvider>
+    </NetworkContext.Provider>
   );
 }

@@ -1,5 +1,5 @@
 {
-  "address": "Dt5N4RsBurrVSfFqNxsbBtNKfodYFSHtsCCXYjh9dsdZ",
+  "address": "ATsyGivpSuNFVehNN9baLzRFCqSfC78uucEz5Hrx7WWc",
   "metadata": {
     "name": "user",
     "version": "0.1.0",
@@ -64,7 +64,11 @@
           "type": "string"
         },
         {
-          "name": "phone",
+          "name": "yourphone",
+          "type": "string"
+        },
+        {
+          "name": "caregiverphone",
           "type": "string"
         }
       ]
@@ -122,7 +126,11 @@
           "type": "string"
         },
         {
-          "name": "phone",
+          "name": "yourphone",
+          "type": "string"
+        },
+        {
+          "name": "caregiverphone",
           "type": "string"
         }
       ]
@@ -184,7 +192,11 @@
             "type": "string"
           },
           {
-            "name": "phone",
+            "name": "yourphone",
+            "type": "string"
+          },
+          {
+            "name": "caregiverphone",
             "type": "string"
           }
         ]

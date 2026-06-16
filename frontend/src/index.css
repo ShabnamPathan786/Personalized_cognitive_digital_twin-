@@ -247,3 +247,36 @@
      from { opacity: 0; transform: translateY(24px); }
      to   { opacity: 1; transform: translateY(0); }
    }
+
+   /* ── Solana Wallet Adapter Button Override ── */
+   .wallet-adapter-button {
+     font-family: var(--font-body) !important;
+     font-weight: 700 !important;
+     font-size: var(--text-sm) !important;
+     background: transparent !important;
+     color: var(--color-charcoal) !important;
+     border: 2px solid rgba(44, 44, 42, 0.2) !important;
+     border-radius: var(--radius-full) !important;
+     padding: 10px 24px !important;
+     cursor: pointer !important;
+     transition: all var(--transition-base) !important;
+     display: inline-flex !important;
+     align-items: center !important;
+     gap: var(--space-2) !important;
+     height: auto !important;
+     line-height: normal !important;
+   }
+
+   .wallet-adapter-button:hover {
+     border-color: var(--color-charcoal) !important;
+     transform: translateY(-2px) !important;
+     background: transparent !important;
+   }
+
+   .wallet-adapter-button-trigger {
+     background: transparent !important;
+   }
+
+   .wallet-adapter-button:not([disabled]):hover {
+     background: transparent !important;
+   }

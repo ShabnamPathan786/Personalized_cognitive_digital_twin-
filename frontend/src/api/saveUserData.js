@@ -1,4 +1,3 @@
-
 import { useWallet } from "@solana/wallet-adapter-react"
 import {useMutation} from "@tanstack/react-query"
 import { useProgram } from "../hooks/useProgram"
@@ -14,7 +13,8 @@ export const storeUser = ()=>{
         mutationFn:async({
             name,
             email,
-            phone
+            yourphone,
+            caregiverphone
         }) => {
             try {
                 if(!publicKey){
@@ -22,7 +22,7 @@ export const storeUser = ()=>{
                 }
                 const userPda = getUserPda()
                 const tx = await program.methods
-                        .createProfile(name,email,phone)
+                        .createProfile(name,email,yourphone,caregiverphone)
                         .accounts({
                             profile:userPda,
                             user:publicKey,

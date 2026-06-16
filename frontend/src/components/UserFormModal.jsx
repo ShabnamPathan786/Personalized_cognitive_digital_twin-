@@ -2,13 +2,14 @@ import { useState } from 'react';
 import { storeUser } from '../api/saveUserData';
 import { toast } from 'sonner';
 
-export default function UserFormModal({ isOpen, onClose, onSave }) {
+export default function UserFormModal({ isOpen, onClose, onSave, prefillData }) {
   const [form, setForm] = useState({
-    name: '',
-    email: '',
-    phone: '',
+    name: prefillData?.fullName || '',
+    email: prefillData?.email || '',
+    yourphone: prefillData?.phoneNumber || '',
+    caregiverphone: prefillData?.emergencyContacts?.[0]?.phoneNumber || ''
   });
-  
+
   const [errors, setErrors] = useState({});
 
   const { mutate, isPending } = storeUser();
@@ -40,10 +41,16 @@ export default function UserFormModal({ isOpen, onClose, onSave }) {
       newErrors.email = 'Invalid email';
     }
 
-    if (!form.phone.trim()) {
-      newErrors.phone = 'Phone is required';
-    } else if (!/^\d{10}$/.test(form.phone)) {
-      newErrors.phone = 'Enter valid 10-digit number';
+    if (!form.yourphone.trim()) {
+      newErrors.yourphone = 'Patient Phone is required';
+    } else if (!/^\+?[0-9]{10,13}$/.test(form.yourphone.replace(/\s/g, ''))) {
+      newErrors.yourphone = 'Enter valid phone number';
+    }
+
+    if (!form.caregiverphone.trim()) {
+      newErrors.caregiverphone = 'Emergency Phone is required';
+    } else if (!/^\+?[0-9]{10,13}$/.test(form.caregiverphone.replace(/\s/g, ''))) {
+      newErrors.caregiverphone = 'Enter valid phone number';
     }
 
     return newErrors;
@@ -58,7 +65,12 @@ export default function UserFormModal({ isOpen, onClose, onSave }) {
       return;
     }
 
-    mutate(form, {
+    mutate({
+      name: form.name,
+      email: form.email,
+      yourphone: form.yourphone,
+      caregiverphone: form.caregiverphone
+    }, {
       onSuccess: (tx) => {
         if (tx) {
           toast.success('User data secured successfully!');
@@ -146,20 +158,40 @@ export default function UserFormModal({ isOpen, onClose, onSave }) {
 
             <div>
               <input
-                name="phone"
-                value={form.phone}
+                name="yourphone"
+                value={form.yourphone}
                 onChange={handleChange}
                 type="tel"
-                placeholder="Phone Number"
+                placeholder="Patient Phone Number"
                 className="input-field"
                 style={{
                   background: 'var(--color-cream)',
                   border: '1px solid var(--color-cream-dark)',
                 }}
               />
-              {errors.phone && (
+              {errors.yourphone && (
                 <p style={{ color: 'var(--color-ember)', fontSize: 12, marginTop: 4 }}>
-                  {errors.phone}
+                  {errors.yourphone}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <input
+                name="caregiverphone"
+                value={form.caregiverphone}
+                onChange={handleChange}
+                type="tel"
+                placeholder="Emergency/Caregiver Phone"
+                className="input-field"
+                style={{
+                  background: 'var(--color-cream)',
+                  border: '1px solid var(--color-cream-dark)',
+                }}
+              />
+              {errors.caregiverphone && (
+                <p style={{ color: 'var(--color-ember)', fontSize: 12, marginTop: 4 }}>
+                  {errors.caregiverphone}
                 </p>
               )}
             </div>

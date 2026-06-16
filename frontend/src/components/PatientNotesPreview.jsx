@@ -17,32 +17,46 @@ const NoteCard = ({ note, index, onNavigate }) => {
     return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
   }, [note.updatedAt, note.createdAt]);
 
-  const getNoteStyles = () => {
-    const baseStyles = {
-      REMINDER: {
-        gradient: 'linear-gradient(135deg, #FFF8E7 0%, #FFECD2 100%)',
-        border: '#F0C040',
-        icon: '⏰',
-        iconBg: '#FEF3C7',
-        label: 'Reminder',
-      },
-      MEDICAL: {
-        gradient: 'linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%)',
-        border: '#86EFAC',
-        icon: '💊',
-        iconBg: '#DCFCE7',
-        label: 'Medical',
-      },
-      GENERAL: {
-        gradient: 'linear-gradient(135deg, #F8FAFC 0%, #E2E8F0 100%)',
-        border: '#CBD5E1',
-        icon: '📝',
-        iconBg: '#F1F5F9',
-        label: 'Note',
-      },
+    const getNoteStyles = () => {
+        const baseStyles = {
+            PERSONAL: {
+                gradient: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)',
+                border: '#93C5FD',
+                icon: '📝',
+                iconBg: '#DBEAFE',
+                label: 'Personal',
+            },
+            DOCUMENT: {
+                gradient: 'linear-gradient(135deg, #F3F4F6 0%, #E5E7EB 100%)',
+                border: '#D1D5DB',
+                icon: '📄',
+                iconBg: '#E5E7EB',
+                label: 'Document',
+            },
+            SUMMARY: {
+                gradient: 'linear-gradient(135deg, #FAF5FF 0%, #F3E8FF 100%)',
+                border: '#D8B4FE',
+                icon: '🤖',
+                iconBg: '#F3E8FF',
+                label: 'AI Summary',
+            },
+            OTHER: {
+                gradient: 'linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 100%)',
+                border: '#FDBA74',
+                icon: '📌',
+                iconBg: '#FFEDD5',
+                label: 'Other',
+            },
+            GENERAL: {
+                gradient: 'linear-gradient(135deg, #F8FAFC 0%, #E2E8F0 100%)',
+                border: '#CBD5E1',
+                icon: '📝',
+                iconBg: '#F1F5F9',
+                label: 'Note',
+            },
+        };
+        return baseStyles[note.type] || baseStyles.GENERAL;
     };
-    return baseStyles[note.type] || baseStyles.GENERAL;
-  };
 
   const styles = getNoteStyles();
   const isLongContent = note.content?.length > 100;
@@ -252,12 +266,12 @@ export default function PatientNotesPreview() {
       console.log("response:",response)
       if (response.success) {
         const sortedNotes = (response.data || [])
+          .filter(n => n.showOnDashboard)
           .sort((a, b) => {
             if (a.pinned && !b.pinned) return -1;
             if (!a.pinned && b.pinned) return 1;
             return new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt);
-          })
-          .slice(0, 6);
+          });
         setNotes(sortedNotes);
       }
     } catch (err) {
@@ -271,17 +285,7 @@ export default function PatientNotesPreview() {
     fetchNotes();
   }, [fetchNotes]);
 
-  const filteredNotes = useMemo(() => {
-    if (activeFilter === 'ALL') return notes;
-    return notes.filter(n => n.type === activeFilter);
-  }, [notes, activeFilter]);
-
-  const stats = useMemo(() => ({
-    total: notes.length,
-    reminders: notes.filter(n => n.type === 'REMINDER').length,
-    medical: notes.filter(n => n.type === 'MEDICAL').length,
-    pinned: notes.filter(n => n.pinned).length,
-  }), [notes]);
+  const filteredNotes = notes;
 
   if (loading) {
     return (
@@ -344,8 +348,8 @@ export default function PatientNotesPreview() {
               color: 'var(--color-charcoal-mid)',
               margin: 0,
             }}>
-              {stats.total > 0 
-                ? `You have ${stats.total} note${stats.total !== 1 ? 's' : ''} • ${stats.reminders} reminder${stats.reminders !== 1 ? 's' : ''} • ${stats.medical} medical`
+              {notes.length > 0 
+                ? `Showing ${notes.length} pinned note${notes.length !== 1 ? 's' : ''}`
                 : 'Keep track of important things'}
             </p>
           </div>
@@ -357,66 +361,8 @@ export default function PatientNotesPreview() {
               onClick={() => navigate('/notes')}
               color="#9DBDB8"
             />
-            <QuickAction 
-              icon="⏰" 
-              label="Reminder" 
-              onClick={() => navigate('/notes?type=reminder')}
-              color="#F0C040"
-            />
           </div>
         </div>
-
-        {/* Filter Tabs */}
-        {stats.total > 0 && (
-          <div style={{
-            display: 'flex',
-            gap: 'var(--space-2)',
-            marginTop: 'var(--space-5)',
-            flexWrap: 'wrap',
-          }}>
-            {[
-              { key: 'ALL', label: 'All Notes', count: stats.total, color: '#64748B' },
-              { key: 'REMINDER', label: 'Reminders', count: stats.reminders, color: '#F0C040' },
-              { key: 'MEDICAL', label: 'Medical', count: stats.medical, color: '#86EFAC' },
-              { key: 'PINNED', label: 'Pinned', count: stats.pinned, color: '#EA2E00' },
-            ].map((filter) => (
-              <button
-                key={filter.key}
-                onClick={() => setActiveFilter(filter.key === 'PINNED' ? 'ALL' : filter.key)}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: 20,
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontFamily: 'var(--font-body)',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  background: activeFilter === filter.key || (filter.key === 'PINNED' && activeFilter === 'ALL' && filter.count > 0)
-                    ? filter.color 
-                    : '#fff',
-                  color: activeFilter === filter.key || (filter.key === 'PINNED' && activeFilter === 'ALL' && filter.count > 0)
-                    ? '#fff' 
-                    : 'var(--color-charcoal)',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-                  transition: 'all 0.2s ease',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                }}
-              >
-                {filter.label}
-                <span style={{
-                  background: activeFilter === filter.key ? 'rgba(255,255,255,0.3)' : filter.color + '20',
-                  padding: '2px 8px',
-                  borderRadius: 10,
-                  fontSize: 11,
-                }}>
-                  {filter.count}
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Error State */}

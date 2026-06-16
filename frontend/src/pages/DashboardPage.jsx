@@ -2,8 +2,12 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import axios from '../api/axios';
+import { hitlApi } from '../api/hitlApi';
+import { emergencyApi } from '../api/emergencyApi';
+import { useWebSocket } from '../hooks/useWebSocket';
 import PatientNotesPreview from '../components/PatientNotesPreview';
 import Navbar from '../components/Navbar';
+import UserProfileModal from '../components/userDataModal';
 import UserFormModal from '../components/UserFormModal';
 
 const getGreeting = () => {
@@ -20,8 +24,8 @@ const LiveClock = () => {
     return () => clearInterval(t);
   }, []);
   return (
-    <div style={{ textAlign: 'right' }}>
-      <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 700, color: 'var(--color-charcoal)', lineHeight: 1 }}>
+    <div style={{ textAlign: 'right', minWidth: 180 }}>
+      <div style={{ fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 700, color: 'var(--color-charcoal)', lineHeight: 1 }}>
         {time.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
       </div>
       <div style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)', color: 'var(--color-charcoal-mid)', marginTop: 4 }}>
@@ -31,7 +35,7 @@ const LiveClock = () => {
   );
 };
 
-const ActionCard = ({ icon, title, desc, onClick, accentColor, index }) => {
+const ActionCard = ({ icon, title, desc, onClick, index, badge }) => {
   const [hovered, setHovered] = useState(false);
   return (
     <div
@@ -39,38 +43,51 @@ const ActionCard = ({ icon, title, desc, onClick, accentColor, index }) => {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        background: hovered ? accentColor : 'var(--color-white)',
+        position: 'relative',
+        background: 'var(--color-white)',
         borderRadius: 'var(--radius-xl)',
         padding: '1.75rem',
         cursor: 'pointer',
-        border: `2px solid ${hovered ? accentColor : 'rgba(157,189,184,0.2)'}`,
-        transition: 'all 0.25s ease',
+        border: `1.5px solid ${hovered ? 'var(--color-charcoal)' : 'var(--color-sage-subtle)'}`,
+        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         transform: hovered ? 'translateY(-4px)' : 'translateY(0)',
-        boxShadow: hovered ? `0 16px 40px ${accentColor}30` : 'none',
+        boxShadow: hovered ? '0 12px 30px rgba(44, 44, 42, 0.08)' : '0 2px 8px rgba(44, 44, 42, 0.03)',
         opacity: 0,
         animation: `cardIn 0.5s ease forwards ${index * 0.07}s`,
       }}
     >
+      {badge && (
+        <div style={{
+          position: 'absolute', top: 16, right: 16,
+          background: 'var(--color-ember)', color: '#fff',
+          fontSize: '10px', fontWeight: 700, padding: '4px 8px',
+          borderRadius: 'var(--radius-full)', textTransform: 'uppercase',
+          letterSpacing: '0.05em', boxShadow: '0 2px 4px rgba(234, 46, 0, 0.2)'
+        }}>
+          {badge}
+        </div>
+      )}
       <div style={{
-        width: 56, height: 56, borderRadius: 'var(--radius-md)',
-        background: hovered ? 'rgba(255,255,255,0.2)' : `${accentColor}15`,
+        width: 56, height: 56, borderRadius: '50%',
+        background: hovered ? 'var(--color-charcoal)' : 'var(--color-sage-subtle)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 28, marginBottom: 'var(--space-4)',
-        transition: 'background 0.25s ease',
+        fontSize: 24, marginBottom: 'var(--space-4)',
+        transition: 'all 0.3s ease',
+        color: hovered ? '#fff' : 'inherit'
       }}>
-        {icon}
+        <span style={{ transform: hovered ? 'scale(1.1)' : 'scale(1)', transition: 'transform 0.3s ease' }}>{icon}</span>
       </div>
       <div style={{
-        fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 600,
-        color: hovered ? '#fff' : 'var(--color-charcoal)',
-        marginBottom: 'var(--space-2)', transition: 'color 0.25s ease',
+        fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700,
+        color: 'var(--color-charcoal)',
+        marginBottom: 'var(--space-2)', transition: 'color 0.3s ease',
       }}>
         {title}
       </div>
       <div style={{
         fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)',
-        color: hovered ? 'rgba(255,255,255,0.8)' : 'var(--color-charcoal-mid)',
-        lineHeight: 1.55, transition: 'color 0.25s ease',
+        color: 'var(--color-charcoal-mid)',
+        lineHeight: 1.55, transition: 'color 0.3s ease',
       }}>
         {desc}
       </div>
@@ -93,14 +110,27 @@ export default function Home() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [patients, setPatients] = useState([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [caregivers, setCaregivers] = useState([]);
   const [loadingPatients, setLoadingPatients] = useState(false);
   const [loadingCaregivers, setLoadingCaregivers] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [pendingQueue, setPendingQueue] = useState([]);
+  const [resolvingId, setResolvingId] = useState(null);
+  const [activeEmergencies, setActiveEmergencies] = useState([]);
+  const [resolvingEmergencyId, setResolvingEmergencyId] = useState(null);
   const [error, setError] = useState('');
   const [copyToast, setCopyToast] = useState('');
   const toastTimer = useRef(null);
+
+  const { lastMessage } = useWebSocket('/topic/hitl');
+
+  useEffect(() => {
+    if (user?.userType === 'CAREGIVER' && lastMessage) {
+      if (lastMessage.type === 'NEW_HITL_ITEM' || lastMessage.type === 'QUEUE_UPDATE') {
+        fetchPendingHitl();
+      }
+    }
+  }, [lastMessage, user]);
 
   useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
 
@@ -116,9 +146,71 @@ export default function Home() {
   };
 
   useEffect(() => {
-    if (user?.userType === 'CAREGIVER') fetchPatients();
+    let interval;
+    if (user?.userType === 'CAREGIVER') {
+      fetchPatients();
+      fetchPendingHitl();
+      fetchActiveEmergencies();
+      interval = setInterval(fetchActiveEmergencies, 5000);
+    }
     if (user?.userType === 'DEMENTIA_PATIENT') fetchCaregivers();
+    
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [user]);
+
+  const fetchActiveEmergencies = async () => {
+    try {
+      const response = await emergencyApi.getCaregiverAlerts();
+      if (response.success) {
+        const active = (response.data || []).filter(a => a.status === 'ACTIVE' || a.status === 'ACKNOWLEDGED');
+        setActiveEmergencies(active);
+      }
+    } catch (err) {
+      console.error('Failed to load emergencies', err);
+    }
+  };
+
+  const handleResolveEmergency = async (alertId) => {
+    setResolvingEmergencyId(alertId);
+    try {
+      await emergencyApi.resolveAlert(alertId, 'Resolved from dashboard');
+      fetchActiveEmergencies();
+      showCopyToast('Emergency marked as resolved!');
+    } catch (err) {
+      console.error('Failed to resolve emergency', err);
+      setError('Failed to resolve emergency.');
+    } finally {
+      setResolvingEmergencyId(null);
+    }
+  };
+
+  const fetchPendingHitl = async () => {
+    try {
+      const response = await hitlApi.getPendingQueue();
+      if (response.success && response.data) {
+        setPendingQueue(response.data);
+      }
+    } catch (err) {
+      console.error('Failed to load pending HITL queue', err);
+    }
+  };
+
+  const handleResolveHitl = async (itemId) => {
+    setResolvingId(itemId);
+    try {
+      await hitlApi.assignToReviewer(itemId);
+      await hitlApi.resolveOffline(itemId);
+      fetchPendingHitl();
+      showCopyToast('Issue marked as resolved!');
+    } catch (err) {
+      console.error('Failed to resolve issue', err);
+      setError('Failed to resolve issue.');
+    } finally {
+      setResolvingId(null);
+    }
+  };
 
   const fetchPatients = async () => {
     setLoadingPatients(true);
@@ -144,27 +236,24 @@ export default function Home() {
 
   const firstName = (user?.fullName || user?.username || '').split(' ')[0];
 
-    const patientCards = [
-    { icon: '📅', title: 'Daily Routines', desc: 'Manage your daily schedule', onClick: () => navigate('/routines'), color: '#059669' },
-    { icon: '🚨', title: 'Emergency SOS', desc: 'Alert your caregivers instantly', onClick: () => navigate('/emergency'), color: '#C22500' },
-    { icon: '🎤', title: 'Voice Assistant', desc: 'Talk to your AI companion', onClick: () => navigate('/voice-helper'), color: '#9DBDB8' },
-    { icon: '📝', title: 'My Notes', desc: 'Write down important things', onClick: () => navigate('/notes'), color: '#6A9E98' },
-    { icon: '📁', title: 'My Files', desc: 'Store your documents safely', onClick: () => navigate('/files'), color: '#EA2E00' },
-    { icon: '🤖', title: 'Simple Summaries', desc: 'Understand documents easily', onClick: () => navigate('/summarization'), color: '#6A9E98' },
-    { icon: '🔐', title: 'Secure on Chain', desc: 'Secure your identity on blockchain', onClick: () => setIsModalOpen(true), color: '#0284C7' },
-  ];
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isFormModalOpen, setIsFormModalOpen] = useState(false);
 
-  const caregiverCards = [
-    { icon: '👥', title: 'HITL Review', desc: 'Review pending patient queries', onClick: () => navigate('/hitl-dashboard'), color: '#9DBDB8' },
-    { icon: '🚨', title: 'Emergency Alerts', desc: 'View & manage patient emergencies', onClick: () => navigate('/caregiver-emergency'), color: '#EA2E00' },
+  const patientCards = [
+    { icon: '📅', title: 'Daily Routines', desc: 'Manage your daily schedule', onClick: () => navigate('/routines') },
+    { icon: '🚨', title: 'Emergency SOS', desc: 'Alert your caregivers instantly', onClick: () => navigate('/emergency') },
+    { icon: '🎤', title: 'Voice Assistant', desc: 'Talk to your AI companion', onClick: () => navigate('/voice-helper') },
+    { icon: '📝', title: 'My Notes', desc: 'Write down important things', onClick: () => navigate('/notes') },
+    { icon: '📁', title: 'My Files', desc: 'Store your documents safely', onClick: () => navigate('/files') },
+    { icon: '🤖', title: 'Simple Summaries', desc: 'Understand documents easily', onClick: () => navigate('/summarization') },
   ];
 
   const normalCards = [
-    { icon: '📁', title: 'File Manager', desc: 'Upload & organize documents', onClick: () => navigate('/files'), color: '#EA2E00' },
-    { icon: '🤖', title: 'AI Summaries', desc: 'Get smart document summaries', onClick: () => navigate('/summarization'), color: '#9DBDB8' },
-    { icon: '📅', title: 'Daily Routines', desc: 'Manage your daily schedule', onClick: () => navigate('/routines'), color: '#059669' },
-    { icon: '📝', title: 'Notes', desc: 'Personal notes & reminders', onClick: () => navigate('/notes'), color: '#6A9E98' },
-    { icon: '🎤', title: 'Voice Assistant', desc: 'Interact with AI via voice', onClick: () => navigate('/voice-helper'), color: '#EA2E00' },
+    { icon: '📁', title: 'File Manager', desc: 'Upload & organize documents', onClick: () => navigate('/files') },
+    { icon: '🤖', title: 'AI Summaries', desc: 'Get smart document summaries', onClick: () => navigate('/summarization') },
+    { icon: '📅', title: 'Daily Routines', desc: 'Manage your daily schedule', onClick: () => navigate('/routines') },
+    { icon: '📝', title: 'Notes', desc: 'Personal notes & reminders', onClick: () => navigate('/notes') },
+    { icon: '🎤', title: 'Voice Assistant', desc: 'Interact with AI via voice', onClick: () => navigate('/voice-helper') },
   ];
 
   return (
@@ -186,11 +275,12 @@ export default function Home() {
         }}>{copyToast}</div>
       )}
 
-      {/* Navbar */}
-      <Navbar/>
+      <Navbar />
+
+      
 
       {/* Main */}
-      <main style={{ maxWidth: 1200, margin: '0 auto', padding: '3rem 5vw 6rem' }}>
+      <main style={{ maxWidth: 1200, margin: '0 auto', padding: 'calc(var(--nav-height) + var(--space-8)) 5vw 6rem' }}>
 
         {/* Error */}
         {error && (
@@ -201,21 +291,32 @@ export default function Home() {
         )}
 
         {/* Greeting */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'var(--space-12)', flexWrap: 'wrap', gap: 'var(--space-6)' }}>
-          <div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', alignItems: 'start', marginBottom: 'var(--space-10)', gap: 'var(--space-8)' }}>
+          <div style={{ minWidth: 0 }}>
             <div style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-sage-dark)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 'var(--space-2)' }}>
               {getGreeting()}
             </div>
-            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(32px, 4vw, 52px)', fontWeight: 700, color: 'var(--color-charcoal)', lineHeight: 1.1, marginBottom: 'var(--space-3)' }}>
+            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(34px, 4vw, 56px)', fontWeight: 700, color: 'var(--color-charcoal)', lineHeight: 1.05, marginBottom: 'var(--space-3)' }}>
               {firstName} <span style={{ color: 'var(--color-ember)' }}>👋</span>
             </h1>
-            <p style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-md)', color: 'var(--color-charcoal-mid)', lineHeight: 1.6 }}>
-              {user?.userType === 'DEMENTIA_PATIENT'
-                ? 'Everything you need is right here. Take it one step at a time.'
-                : user?.userType === 'CAREGIVER'
-                  ? "Your patients are in good hands. Here's your overview."
-                  : 'Welcome to your Digital Twin home.'}
-            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)', flexWrap: 'wrap' }}>
+              {user?.userType === 'CAREGIVER' && (
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: 'var(--color-white)', border: '1.5px solid var(--color-sage-light)', padding: '8px 14px', borderRadius: 'var(--radius-full)', fontSize: 'var(--text-sm)', boxShadow: 'var(--shadow-sm)', maxWidth: '100%' }}>
+                  <span style={{ color: 'var(--color-charcoal-mid)', fontWeight: 600 }}>Caregiver ID:</span>
+                  <code style={{ fontFamily: 'monospace', color: 'var(--color-charcoal)', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis' }}>{user?.id}</code>
+                  <button onClick={handleCopyId} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center', color: 'var(--color-sage-dark)', flexShrink: 0 }} title="Copy ID">
+                    📋
+                  </button>
+                </div>
+              )}
+              <p style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-md)', color: 'var(--color-charcoal-mid)', lineHeight: 1.6, margin: 0 }}>
+                {user?.userType === 'DEMENTIA_PATIENT'
+                  ? 'Everything you need is right here. Take it one step at a time.'
+                  : user?.userType === 'CAREGIVER'
+                    ? "Your patients are in good hands. Here's your overview."
+                    : 'Welcome to your Digital Twin home.'}
+              </p>
+            </div>
           </div>
           <LiveClock />
         </div>
@@ -223,52 +324,65 @@ export default function Home() {
         {/* ── DEMENTIA PATIENT ── */}
         {user?.userType === 'DEMENTIA_PATIENT' && (
           <>
-            {(!user?.fullName || !user?.phoneNumber) && (
-              <div style={{ background: 'linear-gradient(135deg,#FFF8E7,#FFF3D0)', border: '1.5px solid #F0C040', borderRadius: 'var(--radius-xl)', padding: 'var(--space-5) var(--space-6)', marginBottom: 'var(--space-8)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-4)', flexWrap: 'wrap' }}>
+            {(!user?.fullName || !user?.phoneNumber || !user?.emergencyContacts?.length) && (
+              <div style={{ background: 'var(--color-cream)', border: '1.5px solid var(--color-ember)', borderRadius: 'var(--radius-xl)', padding: 'var(--space-5) var(--space-6)', marginBottom: 'var(--space-8)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-4)', flexWrap: 'wrap', boxShadow: '0 4px 12px rgba(44, 44, 42, 0.05)' }}>
                 <div>
-                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 17, fontWeight: 600, color: '#92400E', marginBottom: 4 }}>Complete your profile</div>
-                  <div style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)', color: '#A16207' }}>Add your name and phone number to unlock all features.</div>
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700, color: 'var(--color-charcoal)', marginBottom: 4 }}>
+                    <span style={{ color: 'var(--color-ember)', marginRight: '8px' }}>💡</span>
+                    Recommended: Complete Your Health & Safety Profile
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)', color: 'var(--color-charcoal-mid)' }}>
+                    Add emergency contacts and your phone number to enable SMS reminders and SOS alerts.
+                  </div>
                 </div>
-                <button onClick={() => navigate('/profile-setup')} style={{ fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-sm)', background: '#D97706', color: '#fff', border: 'none', borderRadius: 'var(--radius-full)', padding: '10px 24px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                  Set up now →
+                <button onClick={() => navigate('/profile-setup')} style={{ fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-sm)', background: 'var(--color-charcoal)', color: 'var(--color-white)', border: '1px solid var(--color-charcoal)', borderRadius: 'var(--radius-full)', padding: '10px 24px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  Complete Profile →
                 </button>
               </div>
             )}
 
-            {/* Blockchain Banner */}
-            <div style={{ background: 'linear-gradient(135deg, #F0F9FF, #E0F2FE)', border: '1.5px solid #7DD3FC', borderRadius: 'var(--radius-xl)', padding: 'var(--space-5) var(--space-6)', marginBottom: 'var(--space-8)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-4)', flexWrap: 'wrap' }}>
+            {/* View On-Chain Data Card */}
+            <div style={{ background: '#eff6ff', border: '1.5px solid #dbeafe', borderRadius: 'var(--radius-xl)', padding: 'var(--space-5) var(--space-6)', marginBottom: 'var(--space-8)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-4)', flexWrap: 'wrap', boxShadow: '0 4px 12px rgba(44, 44, 42, 0.05)' }}>
               <div>
-                <div style={{ fontFamily: 'var(--font-display)', fontSize: 17, fontWeight: 600, color: '#0369A1', marginBottom: 4 }}>Want to secure data on chain?</div>
-                <div style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)', color: '#075985' }}>Save your identity to the blockchain securely for permanent access.</div>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700, color: '#1e3a8a', marginBottom: 4, display: 'flex', alignItems: 'center' }}>
+                  <span style={{ marginRight: '8px' }}>🔍</span>
+                  View On-Chain Data
+                </div>
+                <div style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)', color: '#1e40af', marginTop: '4px' }}>
+                  See your identity and emergency contacts stored permanently on the blockchain.
+                </div>
               </div>
-              <button onClick={() => setIsModalOpen(true)} style={{ fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-sm)', background: '#0284C7', color: '#fff', border: 'none', borderRadius: 'var(--radius-full)', padding: '10px 24px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                Secure Data →
+              <button onClick={() => setIsModalOpen(true)} style={{ fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-sm)', background: '#2563eb', color: '#fff', border: 'none', borderRadius: 'var(--radius-full)', padding: '10px 24px', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'background 0.2s' }} onMouseOver={(e) => e.target.style.background = '#1d4ed8'} onMouseOut={(e) => e.target.style.background = '#2563eb'}>
+                View Data →
               </button>
             </div>
 
             {/* My Caregivers */}
-            <div style={{ background: 'var(--color-white)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-4)', border: '1.5px solid var(--color-sage-light)', marginBottom: 'var(--space-8)' }}>
-              <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 600, color: 'var(--color-charcoal)', marginBottom: 'var(--space-4)' }}>My Caregivers</h3>
+            <div style={{ background: 'var(--color-white)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-4) var(--space-5)', border: '1.5px solid var(--color-sage-light)', marginBottom: 'var(--space-6)', boxShadow: 'var(--shadow-sm)', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'var(--space-4)', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--color-sage-dark)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Care team</div>
+                <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700, color: 'var(--color-charcoal)', margin: 0 }}>My Caregivers</h3>
+              </div>
               {loadingCaregivers
-                ? <div style={{ textAlign: 'center', padding: 'var(--space-4)' }}><div style={{ width: 28, height: 28, border: '3px solid var(--color-sage)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto' }} /></div>
+                ? <div style={{ display: 'flex', justifyContent: 'flex-end', padding: 'var(--space-2)' }}><div style={{ width: 26, height: 26, border: '3px solid var(--color-sage)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} /></div>
                 : caregivers.length > 0
-                  ? <div style={{ display: 'grid', gridTemplateColumns: caregivers.length === 1 ? '1fr' : 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'var(--space-3)' }}>
+                  ? <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                     {caregivers.map((c, i) => (
-                      <div key={c.id || i} style={{ background: 'var(--color-cream)', borderRadius: 'var(--radius-md)', padding: 'var(--space-3)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-2)' }}>
-                          <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--color-sage)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 14 }}>{c.fullName?.[0] || 'C'}</div>
-                          <div>
-                            <div style={{ fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--color-charcoal)' }}>{c.fullName || 'Caregiver'}</div>
-                            <div style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-xs)', color: 'var(--color-charcoal-mid)' }}>{c.email}</div>
+                      <div key={c.id || i} style={{ background: 'var(--color-cream)', borderRadius: 'var(--radius-full)', padding: '8px 14px 8px 8px', border: '1px solid var(--color-cream-dark)', display: 'flex', alignItems: 'center', gap: 'var(--space-3)', maxWidth: 360, minWidth: 220 }}>
+                        <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'var(--color-sage-dark)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-white)', fontWeight: 700, fontSize: 14, flexShrink: 0 }}>{c.fullName?.[0] || 'C'}</div>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)', minWidth: 0 }}>
+                            <div style={{ fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--color-charcoal)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.fullName || 'Caregiver'}</div>
+                            <div style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-xs)', color: 'var(--color-charcoal-muted)', whiteSpace: 'nowrap' }}>@{c.username || 'unknown'}</div>
                           </div>
-                        </div>
-                        <div style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-xs)', color: 'var(--color-charcoal-mid)' }}>
-                          👤 @{c.username || 'unknown'} {c.phoneNumber ? ` • 📱 ${c.phoneNumber}` : ''}
+                          <div style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-xs)', color: 'var(--color-charcoal-mid)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {c.phoneNumber || c.email || 'Connected caregiver'}
+                          </div>
                         </div>
                       </div>
                     ))}
                   </div>
-                  : <div style={{ textAlign: 'center', padding: 'var(--space-4)', color: 'var(--color-charcoal-mid)', fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)' }}>No caregivers linked yet.</div>
+                  : <div style={{ textAlign: 'right', padding: 'var(--space-2) 0', color: 'var(--color-charcoal-mid)', fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)' }}>No caregivers linked yet.</div>
               }
             </div>
 
@@ -280,13 +394,13 @@ export default function Home() {
           </>
         )}
         {/* ── NOTES FEATURE PREVIEW ── */}
-        {user?.userType !== 'DEMENTIA_PATIENT' && (
+        {user?.userType === 'NORMAL' && (
           <div style={{
-            background: 'linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%)',
+            background: 'var(--color-white)',
             borderRadius: 24,
             padding: 'var(--space-8)',
             marginBottom: 'var(--space-8)',
-            border: '2px solid #86EFAC',
+            border: '1.5px solid var(--color-sage)',
             position: 'relative',
             overflow: 'hidden',
           }}>
@@ -345,15 +459,15 @@ export default function Home() {
                 <span style={{
                   display: 'inline-block',
                   padding: '8px 16px',
-                  background: '#fff',
+                  background: 'var(--color-sage-subtle)',
                   borderRadius: 'var(--radius-full)',
                   fontFamily: 'var(--font-body)',
                   fontSize: 'var(--text-xs)',
                   fontWeight: 700,
-                  color: '#16A34A',
+                  color: 'var(--color-sage-dark)',
                   textTransform: 'uppercase',
                   letterSpacing: '0.05em',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
                 }}>
                   Available for Dementia Patient Accounts
                 </span>
@@ -365,51 +479,117 @@ export default function Home() {
         {/* ── CAREGIVER ── */}
         {user?.userType === 'CAREGIVER' && (
           <>
-            <div style={{ background: 'var(--color-white)', borderRadius: 'var(--radius-xl)', padding: 'var(--space-6)', marginBottom: 'var(--space-8)', border: '1.5px solid var(--color-sage-light)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
-                <div style={{ width: 44, height: 44, borderRadius: 'var(--radius-md)', background: 'var(--color-sage-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>🆔</div>
-                <div>
-                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 17, fontWeight: 600, color: 'var(--color-charcoal)' }}>Your Caregiver ID</div>
-                  <div style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-xs)', color: 'var(--color-charcoal-mid)' }}>Share this with patients to connect</div>
-                </div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', background: 'var(--color-cream)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-4)' }}>
-                <code style={{ flex: 1, fontFamily: 'monospace', fontSize: 'var(--text-sm)', color: 'var(--color-charcoal)', wordBreak: 'break-all' }}>{user?.id}</code>
-                <button onClick={handleCopyId} style={{ fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 'var(--text-xs)', background: 'var(--color-sage)', color: '#fff', border: 'none', borderRadius: 'var(--radius-full)', padding: '8px 16px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>Copy</button>
-              </div>
-            </div>
-
-            <SectionHeading label="Your patients" title="Linked patients" />
-            {loadingPatients
-              ? <div style={{ textAlign: 'center', padding: 'var(--space-12)' }}><div style={{ width: 40, height: 40, border: '3px solid var(--color-sage)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto' }} /></div>
-              : patients.length > 0
-                ? <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: 'var(--space-4)', marginBottom: 'var(--space-8)' }}>
-                  {patients.map(p => (
-                    <div key={p.id} style={{ background: 'var(--color-white)', borderRadius: 'var(--radius-xl)', padding: 'var(--space-5)', border: '1.5px solid rgba(157,189,184,0.2)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
-                        <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--color-ember)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 18 }}>{p.fullName?.[0] || 'P'}</div>
-                        <div>
-                          <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 600, color: 'var(--color-charcoal)' }}>{p.fullName || 'Patient'}</div>
-                          <div style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-xs)', color: 'var(--color-charcoal-mid)' }}>{p.email}</div>
+            <section style={{ marginBottom: 'var(--space-8)' }}>
+              <SectionHeading label="Connected patients" title="Linked patient list" />
+              <div style={{ background: 'var(--color-white)', borderRadius: 'var(--radius-xl)', padding: 'var(--space-5)', border: '1.5px solid var(--color-sage-light)', boxShadow: 'var(--shadow-sm)' }}>
+                {loadingPatients
+                  ? <div style={{ textAlign: 'center', padding: 'var(--space-10)' }}><div style={{ width: 40, height: 40, border: '3px solid var(--color-sage)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto' }} /></div>
+                  : patients.length > 0
+                    ? <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 'var(--space-4)' }}>
+                      {patients.map(p => (
+                        <div key={p.id} style={{ background: 'var(--color-cream)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-4)', border: '1px solid var(--color-cream-dark)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
+                            <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--color-sage-dark)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-white)', fontWeight: 700, fontSize: 18 }}>{p.fullName?.[0] || 'P'}</div>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700, color: 'var(--color-charcoal)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.fullName || 'Patient'}</div>
+                              <div style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-xs)', color: 'var(--color-charcoal-mid)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.email}</div>
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-3)' }}>
+                            <span style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-xs)', color: 'var(--color-charcoal-mid)', whiteSpace: 'nowrap' }}>📱 {p.phoneNumber || 'N/A'}</span>
+                            <span style={{ fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 700, background: p.active ? 'var(--color-sage-subtle)' : 'var(--color-cream-dark)', color: p.active ? 'var(--color-sage-dark)' : 'var(--color-charcoal-mid)', padding: '4px 10px', borderRadius: 'var(--radius-full)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{p.active ? 'Active' : 'Inactive'}</span>
+                          </div>
                         </div>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-xs)', color: 'var(--color-charcoal-mid)' }}>📱 {p.phoneNumber || 'N/A'}</span>
-                        <span style={{ fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 700, background: p.active ? '#D1FAE5' : '#F3F4F6', color: p.active ? '#065F46' : '#6B7280', padding: '3px 10px', borderRadius: 'var(--radius-full)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{p.active ? 'Active' : 'Inactive'}</span>
-                      </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-                : <div style={{ background: 'var(--color-white)', borderRadius: 'var(--radius-xl)', padding: 'var(--space-12)', textAlign: 'center', border: '1.5px dashed var(--color-cream-dark)', marginBottom: 'var(--space-8)' }}>
-                  <div style={{ fontSize: 48, marginBottom: 'var(--space-4)' }}>👥</div>
-                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 600, color: 'var(--color-charcoal)', marginBottom: 'var(--space-2)' }}>No patients linked yet</div>
-                  <div style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)', color: 'var(--color-charcoal-mid)' }}>Share your Caregiver ID with patients to connect</div>
-                </div>
-            }
+                    : <div style={{ padding: 'var(--space-10)', textAlign: 'center', border: '1.5px dashed var(--color-cream-dark)', borderRadius: 'var(--radius-lg)' }}>
+                      <div style={{ fontSize: 44, marginBottom: 'var(--space-3)' }}>👥</div>
+                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700, color: 'var(--color-charcoal)', marginBottom: 'var(--space-2)' }}>No patients linked yet</div>
+                      <div style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)', color: 'var(--color-charcoal-mid)' }}>Share your Caregiver ID with patients to connect.</div>
+                    </div>
+                }
+              </div>
+            </section>
 
-            <SectionHeading label="Tools" title="Caregiver tools" />
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 'var(--space-4)' }}>
-              {caregiverCards.map((c, i) => <ActionCard key={c.title} {...c} accentColor={c.color} index={i} />)}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', alignItems: 'start', gap: 'var(--space-6)', marginBottom: 'var(--space-8)' }}>
+              {/* Left Column: HITL Reviews */}
+              <section style={{ background: 'var(--color-white)', borderRadius: 'var(--radius-xl)', padding: 'var(--space-5)', border: '1.5px solid var(--color-sage-light)', boxShadow: 'var(--shadow-sm)', minHeight: 260 }}>
+                <SectionHeading label="Requires Action" title={`${pendingQueue.length} Pending Review${pendingQueue.length !== 1 ? 's' : ''}`} />
+                {pendingQueue.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+                    {pendingQueue.map((item) => (
+                      <div key={item.id} style={{ background: 'var(--color-cream)', borderLeft: '4px solid var(--color-sage-dark)', borderRadius: 'var(--radius-md)', padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', boxShadow: 'var(--shadow-sm)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontWeight: 700, color: 'var(--color-charcoal)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '18px' }}>👤</span> {item.userFullName}
+                          </span>
+                          <span style={{ fontSize: '10px', color: 'var(--color-sage-dark)', fontWeight: 700, background: 'var(--color-sage-subtle)', padding: '4px 8px', borderRadius: 'var(--radius-full)', textTransform: 'uppercase' }}>
+                            Score: {Math.round(item.confidenceScore)}%
+                          </span>
+                        </div>
+                        <p style={{ fontSize: '14px', color: 'var(--color-charcoal-mid)', margin: '4px 0', lineHeight: 1.5, fontStyle: 'italic' }}>
+                          "{item.query}"
+                        </p>
+                        <button 
+                          onClick={() => handleResolveHitl(item.id)}
+                          disabled={resolvingId === item.id}
+                          style={{ background: resolvingId === item.id ? 'var(--color-sage-light)' : 'var(--color-sage-dark)', color: 'var(--color-white)', border: 'none', padding: '8px 16px', borderRadius: 'var(--radius-full)', fontWeight: 700, cursor: resolvingId === item.id ? 'not-allowed' : 'pointer', marginTop: 'auto', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', transition: 'background 0.2s', fontSize: '13px' }}
+                        >
+                          {resolvingId === item.id ? 'Resolving...' : '✓ Resolved'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ background: 'var(--color-cream)', borderRadius: 'var(--radius-md)', padding: 'var(--space-6)', textAlign: 'center', border: '1px dashed var(--color-cream-dark)' }}>
+                    <span style={{ fontSize: '24px' }}>✅</span>
+                    <p style={{ color: 'var(--color-charcoal-mid)', fontSize: '14px', marginTop: '8px', marginBottom: 0 }}>No pending reviews</p>
+                  </div>
+                )}
+              </section>
+
+              {/* Right Column: Emergencies */}
+              <section style={{ background: 'var(--color-white)', borderRadius: 'var(--radius-xl)', padding: 'var(--space-5)', border: activeEmergencies.length > 0 ? '1.5px solid var(--color-ember)' : '1.5px solid var(--color-sage-light)', boxShadow: 'var(--shadow-sm)', minHeight: 260 }}>
+                <SectionHeading label="Urgent" title={`${activeEmergencies.length} Active Emergenc${activeEmergencies.length !== 1 ? 'ies' : 'y'}`} />
+                {activeEmergencies.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+                    {activeEmergencies.map((alert) => (
+                      <div key={alert.id} style={{ background: 'var(--color-ember-subtle)', borderLeft: '4px solid var(--color-ember)', borderRadius: 'var(--radius-md)', padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', boxShadow: 'var(--shadow-sm)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontWeight: 700, color: 'var(--color-charcoal)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '18px' }}>🚨</span> {alert.patientName}
+                          </span>
+                          <span style={{ fontSize: '10px', color: 'var(--color-white)', fontWeight: 700, background: 'var(--color-ember)', padding: '4px 8px', borderRadius: 'var(--radius-full)', textTransform: 'uppercase' }}>
+                            {alert.severity}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '13px', color: 'var(--color-charcoal-mid)', margin: '4px 0', lineHeight: 1.5 }}>
+                          <p style={{ margin: '0 0 4px 0' }}><strong>Type:</strong> {alert.alertType?.replace(/_/g, ' ')}</p>
+                          {alert.message && alert.message !== 'Emergency SOS triggered' && <p style={{ margin: '0 0 4px 0' }}><strong>Message:</strong> {alert.message}</p>}
+                          {alert.location && alert.location !== 'Location unavailable' && (
+                            <p style={{ margin: 0 }}>
+                              <strong>Location:</strong>{' '}
+                              <a href={alert.location} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-ember-dark)', textDecoration: 'underline' }}>View Map</a>
+                            </p>
+                          )}
+                        </div>
+                        <button 
+                          onClick={() => handleResolveEmergency(alert.id)}
+                          disabled={resolvingEmergencyId === alert.id}
+                          style={{ background: resolvingEmergencyId === alert.id ? 'var(--color-ember-light)' : 'var(--color-ember)', color: 'var(--color-white)', border: 'none', padding: '8px 16px', borderRadius: 'var(--radius-full)', fontWeight: 700, cursor: resolvingEmergencyId === alert.id ? 'not-allowed' : 'pointer', marginTop: 'auto', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', transition: 'background 0.2s', fontSize: '13px' }}
+                        >
+                          {resolvingEmergencyId === alert.id ? 'Resolving...' : '✓ Resolve Emergency'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ background: 'var(--color-cream)', borderRadius: 'var(--radius-md)', padding: 'var(--space-6)', textAlign: 'center', border: '1px dashed var(--color-cream-dark)' }}>
+                    <span style={{ fontSize: '24px' }}>🛡️</span>
+                    <p style={{ color: 'var(--color-charcoal-mid)', fontSize: '14px', marginTop: '8px', marginBottom: 0 }}>No active emergencies</p>
+                  </div>
+                )}
+              </section>
             </div>
           </>
         )}
@@ -429,11 +609,20 @@ export default function Home() {
         © 2026 DigitalTwin — Built with compassion for dementia care
       </footer>
 
-      {/* User Form Modal for Blockchain Data */}
-      <UserFormModal 
+      <UserProfileModal 
         isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
-        onSave={() => setIsModalOpen(false)} 
+        onClose={() => setIsModalOpen(false)}
+        onSecureData={() => {
+          setIsModalOpen(false);
+          setIsFormModalOpen(true);
+        }}
+      />
+
+      <UserFormModal
+        isOpen={isFormModalOpen}
+        onClose={() => setIsFormModalOpen(false)}
+        onSave={() => setIsFormModalOpen(false)}
+        prefillData={user}
       />
     </div>
   );

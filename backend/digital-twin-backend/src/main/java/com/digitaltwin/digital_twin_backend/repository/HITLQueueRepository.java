@@ -12,13 +12,13 @@ import java.util.Optional;
 @Repository
 public interface HITLQueueRepository extends MongoRepository<HITLQueueItem, String> {
 
-    // Find pending items sorted by priority
+    // Find pending items sorted by creation time
     @Query("{ 'status' : 'PENDING' }")
-    List<HITLQueueItem> findByStatusOrderByPriorityAscCreatedAtAsc(HITLQueueItem.QueueStatus status);
+    List<HITLQueueItem> findByStatusOrderByCreatedAtAsc(HITLQueueItem.QueueStatus status);
 
-    // Find pending items for specific patients sorted by priority
+    // Find pending items for specific patients sorted by creation time
     @Query("{ 'status' : 'PENDING', 'userId': { $in: ?1 } }")
-    List<HITLQueueItem> findByStatusAndUserIdInOrderByPriorityAscCreatedAtAsc(HITLQueueItem.QueueStatus status, List<String> userIds);
+    List<HITLQueueItem> findByStatusAndUserIdInOrderByCreatedAtAsc(HITLQueueItem.QueueStatus status, List<String> userIds);
 
     // Find by reviewer
     List<HITLQueueItem> findByReviewerId(String reviewerId);
@@ -30,8 +30,7 @@ public interface HITLQueueRepository extends MongoRepository<HITLQueueItem, Stri
             HITLQueueItem.QueueStatus status,
             LocalDateTime before);
 
-    // Find by priority
-    List<HITLQueueItem> findByPriority(HITLQueueItem.PriorityLevel priority);
+
 
     // Find by user
     List<HITLQueueItem> findByUserId(String userId);

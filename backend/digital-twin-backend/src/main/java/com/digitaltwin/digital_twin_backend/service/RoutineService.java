@@ -191,12 +191,31 @@ public class RoutineService {
     }
 
     public Routine logRoutineMissed(String routineId) {
+        return logRoutineMissed(routineId, LocalDateTime.now());
+    }
+
+    public Routine logRoutineMissed(String routineId, LocalDateTime scheduledDateTime) {
         Routine routine = getRoutineById(routineId);
         
         Routine.RoutineLog log = new Routine.RoutineLog();
-        log.setScheduledDateTime(LocalDateTime.now());
+        log.setScheduledDateTime(scheduledDateTime);
         log.setStatus(Routine.RoutineStatus.MISSED);
         log.setNotes("Automatically marked missed by scheduler");
+
+        if (routine.getLogs() == null) {
+            routine.setLogs(new ArrayList<>());
+        }
+        routine.getLogs().add(log);
+        return routineRepository.save(routine);
+    }
+
+    public Routine logRoutineReminderSent(String routineId, LocalDateTime scheduledDateTime) {
+        Routine routine = getRoutineById(routineId);
+
+        Routine.RoutineLog log = new Routine.RoutineLog();
+        log.setScheduledDateTime(scheduledDateTime);
+        log.setStatus(Routine.RoutineStatus.PENDING);
+        log.setNotes("Reminder sent by scheduler");
 
         if (routine.getLogs() == null) {
             routine.setLogs(new ArrayList<>());

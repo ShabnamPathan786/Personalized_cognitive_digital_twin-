@@ -45,7 +45,20 @@ public class UserProfileService {
 
         // ✅ Preferences - null check
         if (request.getPreferences() != null) {
-            patient.setPreferences(request.getPreferences());
+            User.UserPreferences currentPrefs = patient.getPreferences();
+            if (currentPrefs == null) {
+                currentPrefs = new User.UserPreferences();
+            }
+            if (request.getPreferences().getDiseaseStage() != null) {
+                currentPrefs.setDiseaseStage(request.getPreferences().getDiseaseStage());
+            }
+            if (request.getPreferences().getBloodGroup() != null) {
+                currentPrefs.setBloodGroup(request.getPreferences().getBloodGroup());
+            }
+            if (request.getPreferences().getAllergies() != null) {
+                currentPrefs.setAllergies(request.getPreferences().getAllergies());
+            }
+            patient.setPreferences(currentPrefs);
         }
 
         // 4. Save and Return

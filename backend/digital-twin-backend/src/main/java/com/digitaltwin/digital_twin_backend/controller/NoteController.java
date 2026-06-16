@@ -225,6 +225,31 @@ public class NoteController {
     }
 
     /**
+     * Toggle dashboard
+     * PATCH /api/notes/{id}/dashboard
+     */
+    @PatchMapping("/{id}/dashboard")
+    public ResponseEntity<ApiResponse<Note>> toggleDashboard(
+            @PathVariable String id,
+            Authentication authentication) {
+        try {
+            Note note = noteService.getNoteById(id);
+            CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
+
+            if (!note.getUserId().equals(userDetails.getId())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(ApiResponse.error("Access denied"));
+            }
+
+            Note updatedNote = noteService.toggleDashboard(id);
+            return ResponseEntity.ok(ApiResponse.success("Dashboard status updated", updatedNote));
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.error(e.getMessage()));
+        }
+    }
+
+    /**
      * Delete note
      * DELETE /api/notes/{id}
      */

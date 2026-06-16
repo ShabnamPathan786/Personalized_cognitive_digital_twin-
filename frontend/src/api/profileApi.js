@@ -13,10 +13,7 @@ export const profileApi = {
     completeProfile: async (profileData) => {
         try {
             const response = await axios.put('/profile/complete', profileData);
-            return {
-                success: true,
-                data: response.data
-            };
+            return response.data;
         } catch (error) {
             console.error('Complete profile error:', error);
             return {
@@ -34,10 +31,7 @@ export const profileApi = {
     getProfile: async () => {
         try {
             const response = await axios.get('/profile/me');
-            return {
-                success: true,
-                data: response.data
-            };
+            return response.data;
         } catch (error) {
             console.error('Get profile error:', error);
             return {
@@ -56,10 +50,7 @@ export const profileApi = {
     updateProfile: async (updates) => {
         try {
             const response = await axios.patch('/profile/update', updates);
-            return {
-                success: true,
-                data: response.data
-            };
+            return response.data;
         } catch (error) {
             console.error('Update profile error:', error);
             return {

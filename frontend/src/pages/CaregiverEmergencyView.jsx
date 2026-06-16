@@ -148,6 +148,13 @@ const CaregiverEmergencyView = () => {
         return colors[status] || 'border-gray-300';
     };
 
+    const getAlertSentMessage = (alert) => {
+        if (alert.alertType === 'ROUTINE_MISSED') {
+            return 'Missed routine alert sent to user and caregiver';
+        }
+        return 'Alert sent to caregiver';
+    };
+
     // Separate alerts by status
     const activeAlerts = alerts.filter(alert => alert.status === 'ACTIVE');
     const acknowledgedAlerts = alerts.filter(alert => alert.status === 'ACKNOWLEDGED');
@@ -258,6 +265,10 @@ const CaregiverEmergencyView = () => {
                                                         <strong>Message:</strong> "{alert.message}"
                                                     </p>
                                                 )}
+
+                                                <div className="bg-green-50 border border-green-200 text-green-800 px-3 py-2 rounded-lg font-bold">
+                                                    {getAlertSentMessage(alert)}
+                                                </div>
 
                                                 {alert.location && alert.location !== 'Location unavailable' && (
                                                     <p>

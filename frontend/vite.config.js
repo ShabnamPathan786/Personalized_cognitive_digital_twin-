@@ -22,5 +22,18 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: ['@stomp/stompjs', 'sockjs-client']
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('@solana/web3.js') || id.includes('@coral-xyz/anchor')) {
+              return 'solana-core';
+            }
+          }
+        }
+      }
+    }
   }
 })

@@ -166,6 +166,16 @@ const NotesPage = () => {
         }
     };
 
+    const handleToggleDashboard = async (noteId) => {
+        try {
+            await noteApi.toggleDashboard(noteId);
+            setSuccess('Dashboard status updated');
+            loadNotes();
+        } catch (error) {
+            setError('Failed to update dashboard status');
+        }
+    };
+
     const handleDeleteNote = async (noteId) => {
         if (!window.confirm('Are you sure you want to delete this note?')) return;
 
@@ -175,6 +185,19 @@ const NotesPage = () => {
             loadNotes();
         } catch (error) {
             setError('Failed to delete note');
+        }
+    };
+
+    const handleSeedData = async () => {
+        if (!window.confirm('This will add standard context-rich notes. Continue?')) return;
+        setLoading(true);
+        try {
+            await noteApi.seedDummyData();
+            setSuccess('Context-rich notes added successfully!');
+            loadNotes();
+        } catch (error) {
+            setError('Failed to seed dummy data');
+            setLoading(false);
         }
     };
 
@@ -245,12 +268,22 @@ const NotesPage = () => {
                             </button>
                             <h1 className="text-2xl font-bold text-gray-900">📝 My Notes</h1>
                         </div>
-                        <button
-                            onClick={() => setShowCreateModal(true)}
-                            className="bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 font-medium"
-                        >
-                            + New Note
-                        </button>
+                        <div className="flex items-center gap-3">
+                            {notes.length === 0 && (
+                                <button
+                                    onClick={handleSeedData}
+                                    className="bg-amber-100 text-amber-800 px-4 py-2 rounded-lg hover:bg-amber-200 font-medium transition shadow-sm border border-amber-200 flex items-center gap-2"
+                                >
+                                    <span>🌱 Seed Examples</span>
+                                </button>
+                            )}
+                            <button
+                                onClick={() => setShowCreateModal(true)}
+                                className="bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 font-medium shadow-sm"
+                            >
+                                + New Note
+                            </button>
+                        </div>
                     </div>
                 </div>
             </header>
@@ -337,12 +370,22 @@ const NotesPage = () => {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
                         <p className="text-gray-500 mb-4">No notes found</p>
-                        <button
-                            onClick={() => setShowCreateModal(true)}
-                            className="bg-amber-600 text-white px-6 py-2 rounded-lg hover:bg-amber-700"
-                        >
-                            Create Your First Note
-                        </button>
+                        <div className="flex justify-center gap-4">
+                            {notes.length === 0 && (
+                                <button
+                                    onClick={handleSeedData}
+                                    className="bg-amber-100 text-amber-800 px-6 py-2 rounded-lg hover:bg-amber-200 border border-amber-200 shadow-sm font-medium transition flex items-center gap-2"
+                                >
+                                    <span>🌱 Seed Examples</span>
+                                </button>
+                            )}
+                            <button
+                                onClick={() => setShowCreateModal(true)}
+                                className="bg-amber-600 text-white px-6 py-2 rounded-lg hover:bg-amber-700 font-medium shadow-sm transition"
+                            >
+                                Create Your First Note
+                            </button>
+                        </div>
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -407,8 +450,18 @@ const NotesPage = () => {
                                     )}
                                 </div>
 
+                                {/* Dashboard Toggle */}
+                                <div className="relative z-10 mb-3 mt-auto">
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); handleToggleDashboard(note.id); }}
+                                        className={`w-full px-3 py-2 rounded-lg text-sm font-bold transition shadow-sm border ${note.showOnDashboard ? 'bg-amber-100 border-amber-300 text-amber-800 hover:bg-amber-200' : 'bg-white/60 hover:bg-white border-transparent text-gray-700'}`}
+                                    >
+                                        {note.showOnDashboard ? '🌟 Showing on Dashboard' : '⭐ Set on Dashboard'}
+                                    </button>
+                                </div>
+
                                 {/* Actions */}
-                                <div className="flex gap-2 relative z-10 pt-2 border-t border-black/5 mt-auto">
+                                <div className="flex gap-2 relative z-10 pt-2 border-t border-black/5">
                                     <button
                                         onClick={(e) => { e.stopPropagation(); openEditModal(note); }}
                                         className="flex-1 bg-white/50 hover:bg-white text-gray-700 px-3 py-1.5 rounded text-sm font-bold transition shadow-sm"

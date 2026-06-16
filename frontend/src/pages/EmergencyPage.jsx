@@ -241,6 +241,14 @@ const EmergencyPage = () => {
         return colors[status] || 'border-gray-300';
     };
 
+    const getAlertSentMessage = (alert) => {
+        const caregiverCount = alert.notifiedCaregiverIds?.length || 0;
+        if (caregiverCount > 0) {
+            return `Alert sent to ${caregiverCount} caregiver${caregiverCount > 1 ? 's' : ''}`;
+        }
+        return 'Alert sent to user';
+    };
+
     // Log current state on each render
     console.log('🎨 Rendering EmergencyPage');
     console.log('🔥 activeAlerts in render:', activeAlerts);
@@ -377,6 +385,10 @@ const EmergencyPage = () => {
                                                         <strong>Message:</strong> "{alert.message}"
                                                     </p>
                                                 )}
+
+                                                <div className="bg-green-50 border border-green-200 text-green-800 px-3 py-2 rounded-lg font-bold">
+                                                    {getAlertSentMessage(alert)}
+                                                </div>
 
                                                 {alert.location && alert.location !== 'Location unavailable' && (
                                                     <p>

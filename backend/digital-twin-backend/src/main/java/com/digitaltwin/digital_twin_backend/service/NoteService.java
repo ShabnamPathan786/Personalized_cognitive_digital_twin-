@@ -142,6 +142,16 @@ public class NoteService {
     }
 
     /**
+     * Toggle dashboard visibility
+     */
+    public Note toggleDashboard(String noteId) {
+        Note note = getNoteById(noteId);
+        note.setShowOnDashboard(!note.isShowOnDashboard());
+        note.setUpdatedAt(LocalDateTime.now());
+        return noteRepository.save(note);
+    }
+
+    /**
      * Delete note
      */
     public void deleteNote(String noteId) {

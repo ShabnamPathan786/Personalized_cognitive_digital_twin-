@@ -53,10 +53,6 @@ public class HITLQueueItem {
     private String intentType;
     private String intentSubType;
 
-    // Priority (for sorting queue)
-    private PriorityLevel priority;
-    private String priorityReason;      // e.g., "DEMENTIA_PATIENT", "EMERGENCY_KEYWORD"
-
     // Status
     private QueueStatus status;
 
@@ -101,12 +97,7 @@ public class HITLQueueItem {
         CANCELLED       // User cancelled or disconnected
     }
 
-    public enum PriorityLevel {
-        CRITICAL,       // Emergency keywords detected
-        HIGH,           // Dementia patient
-        MEDIUM,         // Normal user, complex query
-        LOW            // Simple query, just low confidence
-    }
+
 
     @Data
     @NoArgsConstructor

@@ -35,6 +35,7 @@ public class Note {
 
     private boolean pinned;
     private boolean archived;
+    private boolean showOnDashboard;
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

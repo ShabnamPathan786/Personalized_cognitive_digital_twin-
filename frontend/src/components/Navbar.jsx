@@ -6,16 +6,16 @@ import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 
+import { useNetwork } from '../contexts/SolanaProvider';
+
 export default function Navbar() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
   const { connected, publicKey } = useWallet();
+  const { network, setNetwork } = useNetwork();
 
   const [scrolled, setScrolled] = useState(false);
-
-  // 🆕 network state (local UI only, real switch handled in provider)
-  const [network, setNetwork] = useState("devnet");
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 40);

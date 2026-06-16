@@ -1,28 +1,30 @@
+import { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Toaster } from 'sonner';
 
 const queryClient = new QueryClient();
 
 
-// Existing Pages
-import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
-import FilesPage from './pages/FilesPage';
-import EmergencyPage from './pages/EmergencyPage';
-import ProfileSetup from './pages/ProfileSetup';
-import SummarizationPage from './pages/SummarizationPage';
-import NotesPage from './pages/NotesPage';
-import CaregiverEmergencyView from './pages/CaregiverEmergencyView';
-import RoutinePage from './pages/RoutinePage';
+// Lazy-loaded Pages and Components
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const RegisterPage = lazy(() => import('./pages/RegisterPage'));
+const FilesPage = lazy(() => import('./pages/FilesPage'));
+const EmergencyPage = lazy(() => import('./pages/EmergencyPage'));
+const ProfileSetup = lazy(() => import('./pages/ProfileSetup'));
+const SummarizationPage = lazy(() => import('./pages/SummarizationPage'));
+const NotesPage = lazy(() => import('./pages/NotesPage'));
+const CaregiverEmergencyView = lazy(() => import('./pages/CaregiverEmergencyView'));
+const RoutinePage = lazy(() => import('./pages/RoutinePage'));
 
 // Voice Helper and HITL Pages
-import VoiceHelper from './components/VoiceHelper';
-import HITLReviewDashboard from './components/HITLReviewDashboard';
+const VoiceHelper = lazy(() => import('./components/VoiceHelper'));
+const HITLReviewDashboard = lazy(() => import('./components/HITLReviewDashboard'));
 
 import './index.css';
-import LandingPage from './pages/LandingPage';
-import Home from './pages/DashboardPage';
+const LandingPage = lazy(() => import('./pages/LandingPage'));
+const Home = lazy(() => import('./pages/DashboardPage'));
 import SolanaProvider from './contexts/SolanaProvider';
 
 /* ==================== LOADING SPINNER ==================== */
@@ -43,28 +45,11 @@ const PublicRoute = ({ children }) => {
   return children;
 };
 
-/* ==================== ONBOARDING ROUTE ==================== */
-const OnboardingRoute = ({ children }) => {
-  const { user, isAuthenticated, loading } = useAuth();
-  if (loading) return <LoadingSpinner />;
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
-
-  const isProfileIncomplete = !user?.fullName || !user?.phoneNumber;
-  if (user?.userType === 'DEMENTIA_PATIENT' && isProfileIncomplete) return children;
-
-  return <Navigate to="/home" replace />;
-};
-
 /* ==================== PROTECTED ROUTE ==================== */
 const ProtectedRoute = ({ children }) => {
   const { user, isAuthenticated, loading } = useAuth();
   if (loading) return <LoadingSpinner />;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
-
-  const isProfileIncomplete = !user?.fullName || !user?.phoneNumber;
-  if (user?.userType === 'DEMENTIA_PATIENT' && isProfileIncomplete) {
-    return <Navigate to="/profile-setup" replace />;
-  }
 
   return children;
 };
@@ -98,11 +83,11 @@ function AppRoutes() {
       <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
 
       {/* -------- PROFILE SETUP -------- */}
-      <Route path="/profile-setup" element={<OnboardingRoute><ProfileSetup /></OnboardingRoute>} />
+      <Route path="/profile-setup" element={<ProtectedRoute><ProfileSetup /></ProtectedRoute>} />
 
       {/* -------- PROTECTED PAGES -------- */}
       <Route path="/home" element={<ProtectedRoute><Home /></ProtectedRoute>} />
-      <Route path="/profile-setup" element={<ProtectedRoute><ProfileSetup /></ProtectedRoute>} />
+
       
       {/* -------- CORE FEATURES -------- */}
       <Route path="/files" element={<ProtectedRoute><FilesPage /></ProtectedRoute>} />
@@ -141,10 +126,13 @@ function AppRoutes() {
 export default function App() {
   return (
     <Router>
+      <Toaster position="top-right" richColors />
       <AuthProvider>
        <QueryClientProvider client={queryClient}>
          <SolanaProvider>
-           <AppRoutes />
+           <Suspense fallback={<LoadingSpinner />}>
+             <AppRoutes />
+           </Suspense>
          </SolanaProvider>
        </QueryClientProvider>
       </AuthProvider>
