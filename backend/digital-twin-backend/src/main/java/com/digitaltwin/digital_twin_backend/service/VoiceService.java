@@ -58,7 +58,7 @@ public class VoiceService {
     private final com.digitaltwin.digital_twin_backend.repository.NoteRepository noteRepository;
     private final RoutineRepository routineRepository;
 
-    @Value("${app.assemblyai.api.key}")
+    @Value("${app.assemblyai.api.key:}")
     private String assemblyAIApiKey;
 
     private final Map<String, VoiceInteraction> pendingInteractions = new ConcurrentHashMap<>();

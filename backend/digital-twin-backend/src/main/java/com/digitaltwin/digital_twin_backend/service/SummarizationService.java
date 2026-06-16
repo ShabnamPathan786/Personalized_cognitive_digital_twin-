@@ -23,10 +23,10 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class SummarizationService {
 
-    @Value("${app.ai.service.url}")
+    @Value("${app.ai.service.url:https://openrouter.ai/api/v1}")
     private String aiServiceUrl;   // https://openrouter.ai/api/v1
 
-    @Value("${app.ai.api.key}")
+    @Value("${app.ai.api.key:}")
     private String aiApiKey;
 
     @Value("${app.assemblyai.api.key:}")

@@ -18,7 +18,7 @@ public class LLMService {
     @Value("${app.ai.service.url:https://openrouter.ai/api/v1}")
     private String aiServiceUrl;
 
-    @Value("${app.ai.api.key}")
+    @Value("${app.ai.api.key:}")
     private String aiApiKey;
 
     @Value("${app.ai.model:openai/gpt-4o-mini}")
