@@ -21,11 +21,13 @@ export const NetworkContext = createContext();
 export const useNetwork = () => useContext(NetworkContext);
 
 export default function SolanaProvider({ children }) {
-  const [network, setNetwork] = useState("localnet");
+  const defaultNetwork = import.meta.env.VITE_SOLANA_NETWORK || "localnet";
+  const [network, setNetwork] = useState(defaultNetwork);
 
   const endpoint = useMemo(() => {
     if (network === "localnet") return "http://127.0.0.1:8899";
-    return clusterApiUrl("devnet");
+    if (network === "devnet") return import.meta.env.VITE_SOLANA_RPC_URL || clusterApiUrl("devnet");
+    return import.meta.env.VITE_SOLANA_RPC_URL || clusterApiUrl("mainnet-beta");
   }, [network]);
 
   const wallets = useMemo(

@@ -192,7 +192,8 @@ export const useVoiceWebSocket = () => {
             console.log("🔌 Connecting to WebSocket...", sessionId.current);
             console.log("👤 User status:", isAnonymous ? "Anonymous" : "Authenticated", { user });
 
-            const socket = new SockJS("http://localhost:8080/ws-voice", null, {
+            const wsUrl = import.meta.env.VITE_WS_URL || "http://localhost:8080/ws-voice";
+            const socket = new SockJS(wsUrl, null, {
                 transports: ["websocket", "xhr-streaming", "xhr-polling"],
                 timeout: 30000,
             });

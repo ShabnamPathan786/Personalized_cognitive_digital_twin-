@@ -22,6 +22,7 @@ import org.springframework.security.web.authentication.logout.LogoutSuccessHandl
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.util.Arrays;
 import java.util.List;
@@ -33,6 +34,9 @@ import java.util.List;
 public class SecurityConfig {
 
     private final CustomUserDetailsService userDetailsService;
+
+    @Value("${app.cors.allowed-origins}")
+    private List<String> allowedOrigins;
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -106,11 +110,7 @@ public class SecurityConfig {
 
         // Use allowedOriginPatterns instead of allowedOrigins for more flexibility with
         // credentials
-        configuration.setAllowedOriginPatterns(Arrays.asList(
-                "http://localhost:3000",
-                "http://localhost:5173",
-                "http://127.0.0.1:5173",
-                "http://127.0.0.1:3000"));
+        configuration.setAllowedOriginPatterns(allowedOrigins);
 
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
 

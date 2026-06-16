@@ -30,7 +30,8 @@ export const useWebSocket = (topic) => {
     const connectWebSocket = () => {
         try {
             // Create SockJS connection
-            const socket = new SockJS('http://localhost:8080/ws-voice');
+            const wsUrl = import.meta.env.VITE_WS_URL || 'http://localhost:8080/ws-voice';
+            const socket = new SockJS(wsUrl);
 
             // Create STOMP client
             stompClient.current = new Client({

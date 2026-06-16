@@ -127,20 +127,18 @@
             <artifactId>jave-nativebin-win64</artifactId>
             <version>3.5.0</version>
         </dependency>
-        <!-- For Linux, uncomment this and comment Windows above:
+        <!-- For Linux, uncomment this and comment Windows above: -->
         <dependency>
             <groupId>ws.schild</groupId>
             <artifactId>jave-nativebin-linux64</artifactId>
             <version>3.5.0</version>
         </dependency>
-        -->
-        <!-- For Mac, uncomment this and comment Windows above:
+        <!-- For Mac, uncomment this and comment Windows above: -->
         <dependency>
             <groupId>ws.schild</groupId>
             <artifactId>jave-nativebin-osx64</artifactId>
             <version>3.5.0</version>
         </dependency>
-        -->
 
         <!-- ===== FILE OPERATIONS ===== -->
         <!-- Apache Commons IO -->
