@@ -89,10 +89,22 @@ const RegisterPage = () => {
         const result = await register(registrationData);
 
         if (result.success) {
-            navigate('/login', { state: { successMessage:"'Registration successful! Please log in.'"}});
+            navigate('/login', { state: { successMessage: 'Registration successful! Please log in.' }});
         } else {
-            // Show detailed error message from backend
-            setError(result.message || 'Registration failed. Please try again.');
+            if (result.validationErrors) {
+                setErrors(result.validationErrors);
+                setError(result.message);
+            } else {
+                setError(result.message);
+                
+                // Smart mapping for common registration database conflicts
+                const msg = (result.message || '').toLowerCase();
+                if (msg.includes('username')) {
+                    setErrors(prev => ({ ...prev, username: result.message }));
+                } else if (msg.includes('email')) {
+                    setErrors(prev => ({ ...prev, email: result.message }));
+                }
+            }
         }
         setLoading(false);
     };

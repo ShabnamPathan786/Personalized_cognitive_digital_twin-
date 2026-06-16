@@ -120,9 +120,35 @@ export const AuthProvider = ({ children }) => {
       return { success: false, message: response.message };
     } catch (error) {
       console.error('Registration failed:', error);
+      
+      let message = 'Registration failed. Please try again.';
+      let validationErrors = null;
+
+      if (error.response) {
+        const data = error.response.data;
+        
+        // Extract Spring validation constraint violations if present
+        if (data.errors && Array.isArray(data.errors)) {
+          validationErrors = {};
+          data.errors.forEach(err => {
+            if (err.field) {
+              validationErrors[err.field] = err.defaultMessage;
+            }
+          });
+          message = 'Validation failed. Please correct the fields below.';
+        } else {
+          message = data.message || data.error || message;
+        }
+      } else if (error.request) {
+        message = 'Unable to connect to the server. Please check if the backend is running and try again.';
+      } else {
+        message = error.message || message;
+      }
+
       return {
         success: false,
-        message: error.response?.data?.message || 'Registration failed',
+        message,
+        validationErrors
       };
     }
   };
